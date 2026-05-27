@@ -151,6 +151,11 @@ namespace ChineseChess.Game
             return GetAllPieces().FirstOrDefault(p => p.Type == PieceType.General && p.Color == color);
         }
 
+        public void ClearPieces()
+        {
+            pieces.Clear();
+        }
+
         public void Reset()
         {
             InitializeBoard();

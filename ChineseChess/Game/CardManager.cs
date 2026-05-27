@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using ChineseChess.Models;
 
 namespace ChineseChess.Game
@@ -39,6 +40,14 @@ namespace ChineseChess.Game
                 RedHand.Add(deck.DrawCard());
                 BlackHand.Add(deck.DrawCard());
             }
+        }
+
+        public void LoadHands(List<Card> redCards, List<Card> blackCards)
+        {
+            RedHand.Clear();
+            foreach (Card c in redCards) RedHand.Add(c);
+            BlackHand.Clear();
+            foreach (Card c in blackCards) BlackHand.Add(c);
         }
 
         public void Reset()

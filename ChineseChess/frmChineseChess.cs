@@ -35,6 +35,7 @@ namespace ChineseChess
 
         // Freeze selection mode
         private bool selectingFreezeTarget = false;
+        private Card pendingFreezeCard = null;
 
         public frmChineseChess()
         {
@@ -184,7 +185,7 @@ namespace ChineseChess
 
             Label lblHistory = new Label
             {
-                Text = "移動歷史：",
+                Text = "行動記錄：",
                 Location = new System.Drawing.Point(btnX, 210),
                 AutoSize = true
             };
@@ -240,7 +241,7 @@ namespace ChineseChess
 
             Label lblHistory = this.Controls.Cast<System.Windows.Forms.Control>()
                 .OfType<Label>()
-                .FirstOrDefault(l => l.Text == "移動歷史：");
+                .FirstOrDefault(l => l.Text == "行動記錄：");
             if (lblHistory != null)
             {
                 lblHistory.ForeColor = System.Drawing.Color.FromArgb(180, 160, 120);
@@ -325,7 +326,7 @@ namespace ChineseChess
 
             Label lblHistory = this.Controls.Cast<System.Windows.Forms.Control>()
                 .OfType<Label>()
-                .FirstOrDefault(l => l.Text == "移動歷史：");
+                .FirstOrDefault(l => l.Text == "行動記錄：");
             if (lblHistory != null)
                 lblHistory.Location = new System.Drawing.Point(rightX, topOffset + 235);
 
@@ -380,18 +381,10 @@ namespace ChineseChess
 
             lblStatus.Text = statusText;
 
-            // Update move history
+            // Update action log
             lbMoveHistory.Items.Clear();
-            int moveIndex = 1;
-            foreach (Move move in logic.MoveHistory)
-            {
-                string moveStr = $"{moveIndex}. {move.From} → {move.To}";
-                if (move.CapturedPiece != null)
-                    moveStr += $" 吃{move.CapturedPiece.GetCharCode()}";
-                lbMoveHistory.Items.Add(moveStr);
-                moveIndex++;
-            }
-
+            foreach (string entry in logic.ActionLog)
+                lbMoveHistory.Items.Add(entry);
             if (lbMoveHistory.Items.Count > 0)
                 lbMoveHistory.SelectedIndex = lbMoveHistory.Items.Count - 1;
 
@@ -441,6 +434,10 @@ namespace ChineseChess
                 bool frozen = cardEffectProcessor.ProcessFreeze(pos);
                 if (frozen)
                 {
+                    string curName = logic.GameState.CurrentPlayer == PlayerColor.Red ? "紅" : "黑";
+                    string cardStr = pendingFreezeCard != null ? SuitSymbol(pendingFreezeCard.Suit) + "J" : "J牌";
+                    logic.AddLog($"  {cardStr} {curName}方凍結 {piece}({pos.X},{pos.Y})，下回合無法移動");
+                    pendingFreezeCard = null;
                     selectingFreezeTarget = false;
                     MessageBox.Show($"已凍結 {piece}，下回合無法移動！", "凍結", MessageBoxButtons.OK);
                     UpdateStatus();
@@ -472,17 +469,21 @@ namespace ChineseChess
 
                 case CardEffect.Freeze:
                     selectingFreezeTarget = true;
+                    pendingFreezeCard = card;
                     MessageBox.Show("請在棋盤上點擊要凍結的對方棋子", "J 牌 - 凍結", MessageBoxButtons.OK);
                     break;
 
                 case CardEffect.Revive:
-                    HandleRevive(current);
+                    HandleRevive(current, card);
                     break;
 
                 case CardEffect.SkipOpponent:
                     cardEffectProcessor.ProcessSkipOpponent();
                     PlayerColor opponent = current == PlayerColor.Red ? PlayerColor.Black : PlayerColor.Red;
-                    MessageBox.Show($"K 牌效果：{(opponent == PlayerColor.Red ? "紅" : "黑")}方下回合跳過！", "K 牌 - 跳過", MessageBoxButtons.OK);
+                    string curStr = current == PlayerColor.Red ? "紅" : "黑";
+                    string oppStr = opponent == PlayerColor.Red ? "紅" : "黑";
+                    logic.AddLog($"  {SuitSymbol(card.Suit)}K {curStr}方跳過牌，{oppStr}方下回合跳過");
+                    MessageBox.Show($"K 牌效果：{oppStr}方下回合跳過！", "K 牌 - 跳過", MessageBoxButtons.OK);
                     break;
             }
 
@@ -501,14 +502,12 @@ namespace ChineseChess
 
             if (state.Mode == GameMode.PlayerVsAI && defender == PlayerColor.Black)
             {
-                // AI picks a duel card
                 defenderCard = aiPlayer.GetDuelResponse(logic, attackerCard.GetDuelValue());
                 if (defenderCard != null)
                     logic.CardManager.UseCard(defender, defenderCard);
             }
             else
             {
-                // Human defender selects card via dialog
                 using (DuelDialog dlg = new DuelDialog(attackerCard, defender, defenderHand))
                 {
                     if (dlg.ShowDialog(this) == DialogResult.OK)
@@ -521,28 +520,38 @@ namespace ChineseChess
             }
 
             DuelResult result = cardEffectProcessor.ProcessDuel(attacker, attackerCard, defenderCard);
+            LogDuelResult(logic, attacker, defender, attackerCard, defenderCard, result);
 
-            string msg;
             string attackerName = attacker == PlayerColor.Red ? "紅" : "黑";
             string defenderName = defender == PlayerColor.Red ? "紅" : "黑";
-
+            string msg;
             if (result.Tie)
-            {
                 msg = $"對決平手！（{result.AttackerValue} vs {result.DefenderValue}）\n雙方各補一張牌。";
-            }
             else if (result.Winner == attacker)
-            {
                 msg = $"{attackerName}方勝！（{result.AttackerValue} vs {result.DefenderValue}）\n{attackerName}方獲得額外移動機會！";
-            }
             else
-            {
                 msg = $"{defenderName}方勝！（{result.DefenderValue} vs {result.AttackerValue}）\n{defenderName}方下回合獲得額外移動機會！";
-            }
 
             MessageBox.Show(msg, "對決結果", MessageBoxButtons.OK);
         }
 
-        private void HandleRevive(PlayerColor player)
+        private void LogDuelResult(GameLogic logic, PlayerColor attacker, PlayerColor defender, Card atkCard, Card defCard, DuelResult result)
+        {
+            string atkName = attacker == PlayerColor.Red ? "紅" : "黑";
+            string defName = defender == PlayerColor.Red ? "紅" : "黑";
+            string atkStr = SuitSymbol(atkCard.Suit) + PointName(atkCard.Point) + "(" + result.AttackerValue + ")";
+            string defStr = defCard != null ? SuitSymbol(defCard.Suit) + PointName(defCard.Point) + "(" + result.DefenderValue + ")" : "無牌(0)";
+            string outcome;
+            if (result.Tie)
+                outcome = "平手，各補1牌";
+            else if (result.Winner == attacker)
+                outcome = atkName + "方勝，+1步";
+            else
+                outcome = defName + "方勝，下回合+1步";
+            logic.AddLog($"  ⚔ 對決: {atkName}{atkStr} vs {defName}{defStr} → {outcome}");
+        }
+
+        private void HandleRevive(PlayerColor player, Card card)
         {
             GameLogic logic = boardPanel.GameLogic;
             List<Piece> captured = player == PlayerColor.Red ? logic.CapturedRed : logic.CapturedBlack;
@@ -554,9 +563,23 @@ namespace ChineseChess
                     logic.SaveBoardSnapshot();
                     bool ok = cardEffectProcessor.ProcessRevive(dlg.SelectedPiece);
                     if (ok)
+                    {
+                        string playerName = player == PlayerColor.Red ? "紅" : "黑";
+                        logic.AddLog($"  {SuitSymbol(card.Suit)}Q {playerName}方復活 {dlg.SelectedPiece}");
                         MessageBox.Show("已復活 " + dlg.SelectedPiece + "！", "Q 牌 - 復活", MessageBoxButtons.OK);
+                    }
                 }
             }
+        }
+
+        private static string PointName(int point)
+        {
+            switch (point) { case 1: return "A"; case 11: return "J"; case 12: return "Q"; case 13: return "K"; default: return point.ToString(); }
+        }
+
+        private static string SuitSymbol(CardSuit suit)
+        {
+            switch (suit) { case CardSuit.Clubs: return "♣"; case CardSuit.Diamonds: return "♦"; case CardSuit.Hearts: return "♥"; case CardSuit.Spades: return "♠"; default: return "?"; }
         }
 
         private void NewGame()
@@ -621,6 +644,7 @@ namespace ChineseChess
                     {
                         case CardEffect.SkipOpponent:
                             cardEffectProcessor.ProcessSkipOpponent();
+                            logic.AddLog($"  {SuitSymbol(cardToUse.Suit)}K 黑方跳過牌，紅方下回合跳過");
                             MessageBox.Show("黑方使用 K 牌：紅方下回合跳過！", "AI 出牌", MessageBoxButtons.OK);
                             break;
 
@@ -630,6 +654,7 @@ namespace ChineseChess
                             {
                                 cardEffectProcessor.ProcessFreeze(freezePos);
                                 Piece frozen = logic.Board.GetPiece(freezePos);
+                                logic.AddLog($"  {SuitSymbol(cardToUse.Suit)}J 黑方凍結 {frozen}({freezePos.X},{freezePos.Y})");
                                 MessageBox.Show($"黑方使用 J 牌：凍結 {frozen}！", "AI 出牌", MessageBoxButtons.OK);
                             }
                             break;
@@ -637,13 +662,14 @@ namespace ChineseChess
                         case CardEffect.Revive:
                             if (logic.CapturedBlack.Count > 0)
                             {
-                                cardEffectProcessor.ProcessRevive(logic.CapturedBlack[0]);
+                                Piece toRevive = logic.CapturedBlack[0];
+                                cardEffectProcessor.ProcessRevive(toRevive);
+                                logic.AddLog($"  {SuitSymbol(cardToUse.Suit)}Q 黑方復活 {toRevive}");
                                 MessageBox.Show("黑方使用 Q 牌：復活棋子！", "AI 出牌", MessageBoxButtons.OK);
                             }
                             break;
 
                         case CardEffect.Duel:
-                            // AI triggers duel against player
                             Hand playerHand = logic.CardManager.GetHand(PlayerColor.Red);
                             Card playerCard = null;
                             using (DuelDialog dlg = new DuelDialog(cardToUse, PlayerColor.Red, playerHand))
@@ -656,6 +682,7 @@ namespace ChineseChess
                                 }
                             }
                             DuelResult result = cardEffectProcessor.ProcessDuel(PlayerColor.Black, cardToUse, playerCard);
+                            LogDuelResult(logic, PlayerColor.Black, PlayerColor.Red, cardToUse, playerCard, result);
                             string msg = result.Tie
                                 ? "對決平手！雙方各補一張牌。"
                                 : result.Winner == PlayerColor.Black

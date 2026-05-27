@@ -23,6 +23,8 @@ namespace ChineseChess.Game
         private CardManager cardManager;
         private List<Piece> capturedRed = new List<Piece>();
         private List<Piece> capturedBlack = new List<Piece>();
+        private List<string> actionLog = new List<string>();
+        private int chessMoveCount = 0;
 
         public GameLogic()
         {
@@ -40,6 +42,41 @@ namespace ChineseChess.Game
         public CardManager CardManager => cardManager;
         public List<Piece> CapturedRed => capturedRed;
         public List<Piece> CapturedBlack => capturedBlack;
+        public IReadOnlyList<string> ActionLog => actionLog.AsReadOnly();
+
+        public void AddLog(string entry) { actionLog.Add(entry); }
+
+        public void LoadCapturedPieces(List<Piece> redCaptured, List<Piece> blackCaptured)
+        {
+            capturedRed = redCaptured;
+            capturedBlack = blackCaptured;
+        }
+
+        public void LoadActionLog(List<string> log)
+        {
+            actionLog = new List<string>(log);
+            chessMoveCount = 0;
+            foreach (string e in actionLog)
+                if (e.Length > 0 && char.IsDigit(e[0])) chessMoveCount++;
+        }
+
+        private static string GetPieceDisplayName(Piece piece)
+        {
+            string color = piece.Color == PlayerColor.Red ? "紅" : "黑";
+            char typeChar;
+            switch (piece.Type)
+            {
+                case PieceType.General:  typeChar = piece.Color == PlayerColor.Red ? '帥' : '將'; break;
+                case PieceType.Advisor:  typeChar = piece.Color == PlayerColor.Red ? '仕' : '士'; break;
+                case PieceType.Elephant: typeChar = piece.Color == PlayerColor.Red ? '相' : '象'; break;
+                case PieceType.Horse:    typeChar = '馬'; break;
+                case PieceType.Chariot:  typeChar = '車'; break;
+                case PieceType.Cannon:   typeChar = '砲'; break;
+                case PieceType.Soldier:  typeChar = piece.Color == PlayerColor.Red ? '兵' : '卒'; break;
+                default:                 typeChar = '棋'; break;
+            }
+            return color + typeChar;
+        }
 
         public bool MovePiece(Position from, Position to)
         {
@@ -82,6 +119,13 @@ namespace ChineseChess.Game
                 }
                 return false;
             }
+
+            // Log the chess move
+            chessMoveCount++;
+            string logEntry = $"{chessMoveCount}. {GetPieceDisplayName(piece)} ({from.X},{from.Y})→({to.X},{to.Y})";
+            if (captured != null)
+                logEntry += $" 吃{GetPieceDisplayName(captured)}";
+            actionLog.Add(logEntry);
 
             // Handle remaining moves (bonus from duel win)
             gameState.MovesRemainingThisTurn--;
@@ -331,6 +375,8 @@ namespace ChineseChess.Game
             capturedRed.Clear();
             capturedBlack.Clear();
             cardManager.Reset();
+            actionLog.Clear();
+            chessMoveCount = 0;
         }
 
         public void SetGameMode(GameMode mode)
