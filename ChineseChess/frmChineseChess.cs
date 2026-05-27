@@ -23,13 +23,16 @@ namespace ChineseChess
         {
             InitializeComponent();
             this.AutoScaleMode = AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(900, 600);
-            this.MinimumSize = new System.Drawing.Size(800, 500);
-            this.Resize += (s, e) => UpdateLayout();
+            this.ClientSize = new System.Drawing.Size(900, 620);
+            this.MinimumSize = new System.Drawing.Size(750, 520);
             aiPlayer = new AIPlayer();
             InitializeUI();
             SetupGame();
             InitializeAITimer();
+            // Resize 事件在 InitializeUI 後掛載，避免控件未初始化時被呼叫
+            this.Resize += (s, e) => UpdateLayout();
+            // 初始化後立即執行一次布局
+            UpdateLayout();
         }
 
         private void InitializeAITimer()
@@ -131,43 +134,57 @@ namespace ChineseChess
 
         private void UpdateLayout()
         {
-            if (boardPanel == null) return;
+            if (boardPanel == null || menuStrip == null) return;
 
-            int margin = 10;
-            int boardSize = Math.Min(this.ClientSize.Height - menuStrip.Height - 50, this.ClientSize.Width - 200);
-            boardSize = Math.Max(boardSize, 300);
+            const int margin = 10;
+            const int rightPanelWidth = 160;
+            const int topOffset = 55; // 菜單欄 + 狀態列
 
-            // 棋盤位置
-            boardPanel.Location = new System.Drawing.Point(margin, 60);
-            boardPanel.Size = new System.Drawing.Size(boardSize, boardSize);
+            // 可用空間（扣除右側面板和邊距）
+            int availW = this.ClientSize.Width - rightPanelWidth - margin * 3;
+            int availH = this.ClientSize.Height - topOffset - margin;
 
-            // 右側面板控件
+            // 根據棋盤比例（8列:9行 的交叉點間距）計算棋格大小
+            // 加上 margin*2 給 BoardPanel 的留白
+            const int boardMargin = 30;
+            int cellByW = (availW - boardMargin * 2) / 8;
+            int cellByH = (availH - boardMargin * 2) / 9;
+            int cell = Math.Max(Math.Min(cellByW, cellByH), 30);
+
+            // 棋盤控件大小：棋格 + 留白
+            int boardW = 8 * cell + boardMargin * 2;
+            int boardH = 9 * cell + boardMargin * 2;
+
+            boardPanel.Location = new System.Drawing.Point(margin, topOffset);
+            boardPanel.Size = new System.Drawing.Size(boardW, boardH);
+            boardPanel.Invalidate();
+
+            // 右側面板
             int rightX = boardPanel.Right + margin;
-            int rightWidth = this.ClientSize.Width - rightX - margin;
-            if (rightWidth < 100) rightWidth = 100;
+            int rightW = this.ClientSize.Width - rightX - margin;
+            if (rightW < 100) rightW = 100;
 
-            lblStatus.Location = new System.Drawing.Point(rightX, 60);
+            lblStatus.Location = new System.Drawing.Point(rightX, topOffset);
+            lblStatus.Width = rightW;
 
-            btnNewGame.Location = new System.Drawing.Point(rightX, 90);
-            btnNewGame.Width = rightWidth - margin;
+            btnNewGame.Location = new System.Drawing.Point(rightX, topOffset + 30);
+            btnNewGame.Width = rightW;
 
-            btnUndo.Location = new System.Drawing.Point(rightX, 140);
-            btnUndo.Width = rightWidth - margin;
+            btnUndo.Location = new System.Drawing.Point(rightX, topOffset + 80);
+            btnUndo.Width = rightW;
 
-            btnGiveUp.Location = new System.Drawing.Point(rightX, 190);
-            btnGiveUp.Width = rightWidth - margin;
+            btnGiveUp.Location = new System.Drawing.Point(rightX, topOffset + 130);
+            btnGiveUp.Width = rightW;
 
             Label lblHistory = this.Controls.Cast<Control>()
                 .OfType<Label>()
                 .FirstOrDefault(l => l.Text == "移動歷史：");
             if (lblHistory != null)
-            {
-                lblHistory.Location = new System.Drawing.Point(rightX, 240);
-            }
+                lblHistory.Location = new System.Drawing.Point(rightX, topOffset + 185);
 
-            lbMoveHistory.Location = new System.Drawing.Point(rightX, 265);
-            lbMoveHistory.Size = new System.Drawing.Size(rightWidth - margin,
-                this.ClientSize.Height - 265 - margin);
+            lbMoveHistory.Location = new System.Drawing.Point(rightX, topOffset + 210);
+            lbMoveHistory.Size = new System.Drawing.Size(rightW,
+                this.ClientSize.Height - (topOffset + 210) - margin);
         }
 
         private void UpdateStatus()

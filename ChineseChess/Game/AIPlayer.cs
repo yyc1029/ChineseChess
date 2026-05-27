@@ -39,8 +39,11 @@ namespace ChineseChess.Game
 
             List<MoveScore> moves = new List<MoveScore>();
 
+            // 先複製棋子列表，避免遍歷時集合被 GetPossibleMoves 內部修改
+            List<Piece> piecesToEval = board.GetPiecesByColor(aiColor).ToList();
+
             // 評估所有可能的移動
-            foreach (Piece piece in board.GetPiecesByColor(aiColor))
+            foreach (Piece piece in piecesToEval)
             {
                 List<Position> possibleMoves = gameLogic.GetPossibleMoves(piece.Position);
 
@@ -72,48 +75,41 @@ namespace ChineseChess.Game
             Board board = gameLogic.Board;
             int score = 0;
 
-            // 基礎分數：棋子價值
-            score += GetPieceValue(piece.Type);
+            PlayerColor opponent = piece.Color == PlayerColor.Red ? PlayerColor.Black : PlayerColor.Red;
 
-            // 捕子獎勵：優先考慮捕子
+            // 捕子獎勵
             Piece targetPiece = board.GetPiece(target);
             if (targetPiece != null && targetPiece.Color != piece.Color)
             {
-                score += GetPieceValue(targetPiece.Type) * 2; // 捕子的價值x2
+                score += GetPieceValue(targetPiece.Type) * 2;
             }
 
-            // 將軍獎勵
-            Piece general = board.FindGeneral(targetPiece?.Color ?? PlayerColor.Red);
-            if (general != null)
-            {
-                // 臨時執行移動以檢查是否將軍
-                Piece captured = board.MovePiece(piece.Position, target);
-                if (gameLogic.IsInCheck(targetPiece?.Color ?? PlayerColor.Red))
-                {
-                    score += 300; // 將軍獎勵
-                    if (gameLogic.IsCheckmate(targetPiece?.Color ?? PlayerColor.Red))
-                    {
-                        score += 1000; // 將死獎勵
-                    }
-                }
+            // 臨時執行移動以評估將軍
+            Position origPos = piece.Position;
+            Piece captured = board.MovePiece(origPos, target);
 
-                // 復原移動
-                board.MovePiece(target, piece.Position);
-                if (captured != null)
-                {
-                    captured.IsAlive = true;
-                    board.SetPiece(captured.Position, captured);
-                }
+            if (gameLogic.IsInCheck(opponent))
+            {
+                score += 300;
+                if (gameLogic.IsCheckmate(opponent))
+                    score += 1000;
             }
 
-            // 棋子安全性懲罰：避免讓己方棋子被捕
-            foreach (Piece enemy in board.GetPiecesByColor(
-                piece.Color == PlayerColor.Red ? PlayerColor.Black : PlayerColor.Red))
+            // 檢查己方棋子是否暴露在攻擊下（安全性懲罰）
+            MoveValidator validator = new MoveValidator();
+            List<Piece> enemies = board.GetPiecesByColor(opponent).ToList();
+            foreach (Piece enemy in enemies)
             {
-                if (CanCapture(enemy, target, board))
-                {
+                if (validator.IsValidMove(enemy, target, board))
                     score -= GetPieceValue(piece.Type) / 2;
-                }
+            }
+
+            // 復原移動
+            board.MovePiece(target, origPos);
+            if (captured != null)
+            {
+                captured.IsAlive = true;
+                board.SetPiece(captured.Position, captured);
             }
 
             return score;
