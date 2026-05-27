@@ -10,6 +10,7 @@ namespace ChineseChess.UI
         private Button btnPrev;
         private Button btnPlayPause;
         private Button btnNext;
+        private Button btnLoad;
         private TrackBar trackVolume;
         private Label lblTrack;
         private ListBox lstTracks;
@@ -17,7 +18,7 @@ namespace ChineseChess.UI
 
         public AudioPanel()
         {
-            Height = 145;
+            Height = 180;
             BackColor = Color.FromArgb(40, 30, 20);
             BuildControls();
         }
@@ -102,12 +103,48 @@ namespace ChineseChess.UI
             trackVolume.Scroll += (s, e) => audioManager?.SetVolume(trackVolume.Value);
             Controls.Add(trackVolume);
 
+            btnLoad = new Button
+            {
+                Text = "＋ 載入音樂", Left = 5, Top = 145, Width = 160, Height = 28,
+                FlatStyle = FlatStyle.Flat, ForeColor = Color.White,
+                BackColor = Color.FromArgb(80, 60, 40),
+                Font = new Font("微軟正黑體", 9, FontStyle.Bold),
+                Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top
+            };
+            btnLoad.FlatAppearance.BorderColor = Color.FromArgb(120, 100, 60);
+            btnLoad.Click += (s, e) => LoadMusicFiles();
+            Controls.Add(btnLoad);
+
             Resize += (s, e) =>
             {
                 if (trackVolume != null) trackVolume.Width = Math.Max(60, Width - 50);
                 if (lstTracks != null) lstTracks.Width = Width;
                 if (lblTrack != null) lblTrack.Width = Width;
+                if (btnLoad != null) btnLoad.Width = Math.Max(80, Width - 10);
             };
+        }
+
+        private void LoadMusicFiles()
+        {
+            if (audioManager == null) return;
+            using (OpenFileDialog dlg = new OpenFileDialog
+            {
+                Filter = "MP3 音樂檔 (*.mp3)|*.mp3|所有檔案 (*.*)|*.*",
+                Multiselect = true,
+                Title = "選擇音樂檔案"
+            })
+            {
+                if (dlg.ShowDialog() == DialogResult.OK)
+                {
+                    bool wasEmpty = audioManager.TrackCount == 0;
+                    int added = audioManager.AddTracks(dlg.FileNames);
+                    PopulateTrackList();
+                    if (wasEmpty && audioManager.TrackCount > 0)
+                        audioManager.Play();
+                    UpdateUI();
+                    MessageBox.Show($"已加入 {added} 首音樂", "載入音樂", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            }
         }
 
         public void SetAudioManager(AudioManager manager)

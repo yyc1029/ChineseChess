@@ -70,6 +70,24 @@ namespace ChineseChess.UI
             currentIndex = playlist.Count > 0 ? 0 : -1;
         }
 
+        // Append new tracks to the playlist without interrupting playback.
+        // Returns the number of tracks actually added.
+        public int AddTracks(IEnumerable<string> paths)
+        {
+            int added = 0;
+            foreach (string path in paths)
+            {
+                if (File.Exists(path) && !playlist.Contains(path))
+                {
+                    playlist.Add(path);
+                    added++;
+                }
+            }
+            if (currentIndex < 0 && playlist.Count > 0)
+                currentIndex = 0;
+            return added;
+        }
+
         public void Play()
         {
             if (playlist.Count == 0) return;

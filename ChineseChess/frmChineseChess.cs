@@ -202,7 +202,7 @@ namespace ChineseChess
             audioPanel = new AudioPanel
             {
                 Location = new System.Drawing.Point(btnX, 500),
-                Size = new System.Drawing.Size(120, 145)
+                Size = new System.Drawing.Size(120, 180)
             };
             this.Controls.Add(audioPanel);
 
@@ -332,11 +332,11 @@ namespace ChineseChess
 
             lbMoveHistory.Location = new System.Drawing.Point(rightX, topOffset + 260);
             lbMoveHistory.Size = new System.Drawing.Size(rightW,
-                this.ClientSize.Height - (topOffset + 260) - 150 - margin);
+                Math.Max(60, this.ClientSize.Height - (topOffset + 260) - 185 - margin));
 
             audioPanel.Location = new System.Drawing.Point(rightX,
-                this.ClientSize.Height - 150 - margin);
-            audioPanel.Size = new System.Drawing.Size(rightW, 145);
+                this.ClientSize.Height - 185 - margin);
+            audioPanel.Size = new System.Drawing.Size(rightW, 180);
         }
 
         private void UpdateStatus()
