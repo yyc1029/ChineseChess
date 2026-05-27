@@ -15,12 +15,23 @@ namespace ChineseChess
         private Button btnGiveUp;
         private ListBox lbMoveHistory;
         private MenuStrip menuStrip;
+        private Timer aiTimer;
+        private AIPlayer aiPlayer;
 
         public frmChineseChess()
         {
             InitializeComponent();
+            aiPlayer = new AIPlayer();
             InitializeUI();
             SetupGame();
+            InitializeAITimer();
+        }
+
+        private void InitializeAITimer()
+        {
+            aiTimer = new Timer();
+            aiTimer.Interval = 1000; // 1 秒延遲，讓遊戲更流暢
+            aiTimer.Tick += (s, e) => ExecuteAIMove();
         }
 
         private void InitializeUI()
@@ -181,6 +192,7 @@ namespace ChineseChess
         {
             boardPanel.GameLogic.SetGameMode(GameMode.PvP);
             boardPanel.ResetGame();
+            aiTimer.Stop();
             UpdateStatus();
         }
 
@@ -188,17 +200,73 @@ namespace ChineseChess
         {
             boardPanel.GameLogic.SetGameMode(GameMode.PlayerVsAI);
             boardPanel.ResetGame();
+            aiTimer.Start();
             UpdateStatus();
+        }
+
+        private void ExecuteAIMove()
+        {
+            GameLogic logic = boardPanel.GameLogic;
+
+            // 只在AI模式且黑方回合時執行
+            if (logic.GameState.Mode != GameMode.PlayerVsAI ||
+                logic.GameState.CurrentPlayer != PlayerColor.Black ||
+                logic.GameState.Status != GameStatus.Playing)
+            {
+                return;
+            }
+
+            Move aiMove = aiPlayer.GetNextMove(logic);
+            if (aiMove != null)
+            {
+                logic.MovePiece(aiMove.From, aiMove.To);
+                boardPanel.GameState.SelectedPosition = new Position(-1, -1);
+                UpdateStatus();
+                boardPanel.Invalidate();
+            }
         }
 
         private void SaveGame()
         {
-            MessageBox.Show("保存遊戲功能將在第4階段實現", "提示");
+            SaveFileDialog dialog = new SaveFileDialog
+            {
+                Filter = "象棋遊戲檔 (*.chess)|*.chess|All files (*.*)|*.*",
+                DefaultExt = "chess"
+            };
+
+            if (dialog.ShowDialog() == DialogResult.OK)
+            {
+                if (GameSerializer.SaveGame(boardPanel.GameLogic, dialog.FileName))
+                {
+                    MessageBox.Show("遊戲已保存：" + dialog.FileName);
+                }
+            }
         }
 
         private void LoadGame()
         {
-            MessageBox.Show("讀取遊戲功能將在第4階段實現", "提示");
+            OpenFileDialog dialog = new OpenFileDialog
+            {
+                Filter = "象棋遊戲檔 (*.chess)|*.chess|All files (*.*)|*.*"
+            };
+
+            if (dialog.ShowDialog() == DialogResult.OK)
+            {
+                GameLogic loaded = GameSerializer.LoadGame(dialog.FileName);
+                if (loaded != null)
+                {
+                    // 替換當前遊戲邏輯
+                    boardPanel.LoadGameLogic(loaded);
+                    aiTimer.Stop();
+                    if (loaded.GameState.Mode == GameMode.PlayerVsAI)
+                    {
+                        aiTimer.Start();
+                    }
+                    UpdateStatus();
+                    boardPanel.Invalidate();
+                    MessageBox.Show("遊戲已讀取");
+                }
+            }
         }
 
         private void Undo()

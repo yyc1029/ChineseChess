@@ -24,6 +24,7 @@ namespace ChineseChess.UI
         }
 
         public GameLogic GameLogic => gameLogic;
+        public GameState GameState => gameLogic.GameState;
 
         protected override void OnPaint(PaintEventArgs e)
         {
@@ -174,6 +175,14 @@ namespace ChineseChess.UI
         public void ResetGame()
         {
             gameLogic.Reset();
+            gameLogic.GameState.SelectedPosition = new Position(-1, -1);
+            possibleMoves.Clear();
+            Invalidate();
+        }
+
+        public void LoadGameLogic(GameLogic newGameLogic)
+        {
+            gameLogic = newGameLogic;
             gameLogic.GameState.SelectedPosition = new Position(-1, -1);
             possibleMoves.Clear();
             Invalidate();
