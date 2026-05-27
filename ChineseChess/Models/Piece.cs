@@ -18,33 +18,42 @@ namespace ChineseChess.Models
         public override string ToString()
         {
             string colorStr = Color == PlayerColor.Red ? "紅" : "黑";
-            string typeStr = Type switch
+            string typeStr;
+            switch (Type)
             {
-                PieceType.General => "將",
-                PieceType.Advisor => "士",
-                PieceType.Elephant => "象",
-                PieceType.Horse => "馬",
-                PieceType.Chariot => "車",
-                PieceType.Cannon => "砲",
-                PieceType.Soldier => "兵",
-                _ => "?"
-            };
+                case PieceType.General: typeStr = "將"; break;
+                case PieceType.Advisor: typeStr = "士"; break;
+                case PieceType.Elephant: typeStr = "象"; break;
+                case PieceType.Horse: typeStr = "馬"; break;
+                case PieceType.Chariot: typeStr = "車"; break;
+                case PieceType.Cannon: typeStr = "砲"; break;
+                case PieceType.Soldier: typeStr = "兵"; break;
+                default: typeStr = "?"; break;
+            }
             return $"{colorStr}{typeStr}";
         }
 
         public char GetCharCode()
         {
-            return Type switch
+            switch (Type)
             {
-                PieceType.General => Color == PlayerColor.Red ? '帥' : '將',
-                PieceType.Advisor => '士',
-                PieceType.Elephant => Color == PlayerColor.Red ? '相' : '象',
-                PieceType.Horse => '馬',
-                PieceType.Chariot => '車',
-                PieceType.Cannon => '砲',
-                PieceType.Soldier => Color == PlayerColor.Red ? '卒' : '兵',
-                _ => '?'
-            };
+                case PieceType.General:
+                    return Color == PlayerColor.Red ? '帥' : '將';
+                case PieceType.Advisor:
+                    return '士';
+                case PieceType.Elephant:
+                    return Color == PlayerColor.Red ? '相' : '象';
+                case PieceType.Horse:
+                    return '馬';
+                case PieceType.Chariot:
+                    return '車';
+                case PieceType.Cannon:
+                    return '砲';
+                case PieceType.Soldier:
+                    return Color == PlayerColor.Red ? '卒' : '兵';
+                default:
+                    return '?';
+            }
         }
     }
 }
