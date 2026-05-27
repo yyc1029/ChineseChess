@@ -12,6 +12,9 @@ namespace ChineseChess.Game
         private MoveValidator moveValidator;
         private Queue<Move> moveHistory;
         private Stack<(Board, Move)> undoStack;
+        private CardManager cardManager;
+        private List<Piece> capturedRed = new List<Piece>();
+        private List<Piece> capturedBlack = new List<Piece>();
 
         public GameLogic()
         {
@@ -20,11 +23,15 @@ namespace ChineseChess.Game
             moveValidator = new MoveValidator();
             moveHistory = new Queue<Move>();
             undoStack = new Stack<(Board, Move)>();
+            cardManager = new CardManager();
         }
 
         public Board Board => board;
         public GameState GameState => gameState;
         public IEnumerable<Move> MoveHistory => moveHistory;
+        public CardManager CardManager => cardManager;
+        public List<Piece> CapturedRed => capturedRed;
+        public List<Piece> CapturedBlack => capturedBlack;
 
         public bool MovePiece(Position from, Position to)
         {
@@ -33,37 +40,107 @@ namespace ChineseChess.Game
             if (piece == null || piece.Color != gameState.CurrentPlayer)
                 return false;
 
+            if (piece.IsFrozen)
+                return false;
+
             if (!moveValidator.IsValidMove(piece, to, board))
                 return false;
 
-            // 執行移動
+            // Execute move
             Piece captured = board.MovePiece(from, to);
+            if (captured != null)
+            {
+                if (captured.Color == PlayerColor.Red)
+                    capturedRed.Add(captured);
+                else
+                    capturedBlack.Add(captured);
+            }
+
             Move move = new Move(from, to, captured);
             moveHistory.Enqueue(move);
-
-            // 創建快照用於悔棋
             SaveUndoState(move);
 
-            // 檢查當前玩家的將是否被將軍
+            // Check that current player's general is not in check (invalid if so)
             if (IsInCheck(gameState.CurrentPlayer))
             {
-                // 復原移動（非法，會導致自己被將軍）
+                // Restore - undo tracking
                 UndoLastMove();
+                if (captured != null)
+                {
+                    if (captured.Color == PlayerColor.Red)
+                        capturedRed.Remove(captured);
+                    else
+                        capturedBlack.Remove(captured);
+                }
                 return false;
             }
 
-            gameState.CurrentPlayer = gameState.CurrentPlayer == PlayerColor.Red ? PlayerColor.Black : PlayerColor.Red;
+            // Handle remaining moves (bonus from duel win)
+            gameState.MovesRemainingThisTurn--;
 
-            // 檢查新的當前玩家是否被將軍
-            gameState.IsInCheck = IsInCheck(gameState.CurrentPlayer);
-
-            // 檢查將死
-            if (gameState.IsInCheck && IsCheckmate(gameState.CurrentPlayer))
+            if (gameState.MovesRemainingThisTurn <= 0)
             {
-                gameState.Status = gameState.CurrentPlayer == PlayerColor.Red ? GameStatus.BlackWin : GameStatus.RedWin;
+                EndTurn();
+            }
+            else
+            {
+                // Still has bonus move(s) - check opponent for display purposes
+                PlayerColor opponent = gameState.CurrentPlayer == PlayerColor.Red ? PlayerColor.Black : PlayerColor.Red;
+                gameState.IsInCheck = IsInCheck(opponent);
+                if (gameState.IsInCheck && IsCheckmate(opponent))
+                    gameState.Status = opponent == PlayerColor.Red ? GameStatus.BlackWin : GameStatus.RedWin;
             }
 
             return true;
+        }
+
+        private void EndTurn()
+        {
+            // Unfreeze any frozen piece
+            if (gameState.FrozenPosition.X >= 0)
+            {
+                Piece frozen = board.GetPiece(gameState.FrozenPosition);
+                if (frozen != null) frozen.IsFrozen = false;
+                gameState.FrozenPosition = new Position(-1, -1);
+            }
+
+            // Switch to next player
+            gameState.SwitchPlayer();
+            PlayerColor nextPlayer = gameState.CurrentPlayer;
+
+            // Check if next player's turn should be skipped (K card)
+            bool shouldSkip = (nextPlayer == PlayerColor.Red && gameState.SkipNextTurn_Red) ||
+                              (nextPlayer == PlayerColor.Black && gameState.SkipNextTurn_Black);
+
+            if (shouldSkip)
+            {
+                if (nextPlayer == PlayerColor.Red)
+                    gameState.SkipNextTurn_Red = false;
+                else
+                    gameState.SkipNextTurn_Black = false;
+
+                gameState.SwitchPlayer(); // skip this player
+            }
+
+            // Check if defender from last duel gets a bonus move this turn
+            int movesForNextTurn = 1;
+            if (gameState.DefenderBonusMove)
+            {
+                movesForNextTurn = 2;
+                gameState.DefenderBonusMove = false;
+            }
+
+            // Check check/checkmate for new current player
+            gameState.IsInCheck = IsInCheck(gameState.CurrentPlayer);
+            if (gameState.IsInCheck && IsCheckmate(gameState.CurrentPlayer))
+                gameState.Status = gameState.CurrentPlayer == PlayerColor.Red ? GameStatus.BlackWin : GameStatus.RedWin;
+
+            // Reset turn state
+            gameState.MovesRemainingThisTurn = movesForNextTurn;
+            gameState.CardUsedThisTurn = false;
+
+            // Draw a card for new current player
+            cardManager.DrawCard(gameState.CurrentPlayer);
         }
 
         public bool IsValidMove(Position from, Position to)
@@ -72,14 +149,16 @@ namespace ChineseChess.Game
             if (piece == null || piece.Color != gameState.CurrentPlayer)
                 return false;
 
+            if (piece.IsFrozen)
+                return false;
+
             if (!moveValidator.IsValidMove(piece, to, board))
                 return false;
 
-            // 臨時執行移動，檢查將是否被將軍
+            // Temp-move to verify king not exposed
             Piece captured = board.MovePiece(from, to);
             bool valid = !IsInCheck(piece.Color);
 
-            // 復原移動
             board.MovePiece(to, from);
             if (captured != null)
             {
@@ -98,15 +177,16 @@ namespace ChineseChess.Game
             if (piece == null || piece.Color != gameState.CurrentPlayer)
                 return possibleMoves;
 
+            if (piece.IsFrozen)
+                return possibleMoves;
+
             for (int x = 0; x <= 8; x++)
             {
                 for (int y = 0; y <= 9; y++)
                 {
                     Position target = new Position(x, y);
                     if (IsValidMove(from, target))
-                    {
                         possibleMoves.Add(target);
-                    }
                 }
             }
 
@@ -116,8 +196,7 @@ namespace ChineseChess.Game
         public bool IsInCheck(PlayerColor color)
         {
             Piece general = board.FindGeneral(color);
-            if (general == null)
-                return false;
+            if (general == null) return false;
 
             PlayerColor opponent = color == PlayerColor.Red ? PlayerColor.Black : PlayerColor.Red;
             foreach (Piece enemy in board.GetPiecesByColor(opponent))
@@ -131,74 +210,72 @@ namespace ChineseChess.Game
 
         public bool IsCheckmate(PlayerColor color)
         {
-            if (!IsInCheck(color))
-                return false;
+            if (!IsInCheck(color)) return false;
 
-            // 檢查是否有任何合法移動能脫離將軍
             foreach (Piece piece in board.GetPiecesByColor(color))
             {
+                if (piece.IsFrozen) continue;
                 for (int x = 0; x <= 8; x++)
                 {
                     for (int y = 0; y <= 9; y++)
                     {
                         Position target = new Position(x, y);
                         if (IsValidMove(piece.Position, target))
-                            return false; // 找到合法移動，不是將死
+                            return false;
                     }
                 }
             }
 
-            return true; // 沒有合法移動，是將死
+            return true;
         }
 
         public bool Undo()
         {
-            if (undoStack.Count == 0)
-                return false;
+            if (undoStack.Count == 0) return false;
 
             var (previousBoard, move) = undoStack.Pop();
-
-            // 復原棋盤狀態
             board = previousBoard;
 
-            // 移除最後一步棋
+            // Restore captured list
+            if (move.CapturedPiece != null)
+            {
+                if (move.CapturedPiece.Color == PlayerColor.Red)
+                    capturedRed.Remove(move.CapturedPiece);
+                else
+                    capturedBlack.Remove(move.CapturedPiece);
+            }
+
             var allMoves = moveHistory.ToList();
             if (allMoves.Count > 0)
             {
                 allMoves.RemoveAt(allMoves.Count - 1);
                 moveHistory.Clear();
                 foreach (var m in allMoves)
-                {
                     moveHistory.Enqueue(m);
-                }
             }
 
-            // 切換回上一個玩家
             gameState.CurrentPlayer = gameState.CurrentPlayer == PlayerColor.Red ? PlayerColor.Black : PlayerColor.Red;
             gameState.IsInCheck = IsInCheck(gameState.CurrentPlayer);
             gameState.Status = GameStatus.Playing;
+            gameState.MovesRemainingThisTurn = 1;
 
             return true;
         }
 
         private void SaveUndoState(Move move)
         {
-            // 創建當前棋盤的深度複製
             Board boardCopy = new Board();
             boardCopy.Reset();
 
             foreach (Piece piece in board.GetAllPieces())
-            {
-                boardCopy.SetPiece(piece.Position, new Piece(piece.Type, piece.Color, piece.Position) { IsAlive = piece.IsAlive });
-            }
+                boardCopy.SetPiece(piece.Position, new Piece(piece.Type, piece.Color, piece.Position) { IsAlive = piece.IsAlive, IsFrozen = piece.IsFrozen });
 
             undoStack.Push((boardCopy, move));
         }
 
         private void UndoLastMove()
         {
-            if (undoStack.Count == 0)
-                return;
+            if (undoStack.Count == 0) return;
 
             var (previousBoard, _) = undoStack.Pop();
             board = previousBoard;
@@ -209,9 +286,7 @@ namespace ChineseChess.Game
                 allMoves.RemoveAt(allMoves.Count - 1);
                 moveHistory.Clear();
                 foreach (var m in allMoves)
-                {
                     moveHistory.Enqueue(m);
-                }
             }
         }
 
@@ -221,6 +296,9 @@ namespace ChineseChess.Game
             gameState.Reset();
             moveHistory.Clear();
             undoStack.Clear();
+            capturedRed.Clear();
+            capturedBlack.Clear();
+            cardManager.Reset();
         }
 
         public void SetGameMode(GameMode mode)

@@ -12,6 +12,10 @@ namespace ChineseChess.Game
             if (piece == null || !target.IsValid())
                 return false;
 
+            // Frozen pieces cannot move
+            if (piece.IsFrozen)
+                return false;
+
             // 不能移動到己方棋子上
             Piece targetPiece = board.GetPiece(target);
             if (targetPiece != null && targetPiece.Color == piece.Color)

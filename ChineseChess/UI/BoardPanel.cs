@@ -21,6 +21,7 @@ namespace ChineseChess.UI
 
         public event Action<Position> OnPieceSelected;
         public event Action<Position, Position> OnMoveMade;
+        public event Action<Position> OnBoardClicked;
 
         public BoardPanel()
         {
@@ -209,6 +210,9 @@ namespace ChineseChess.UI
             Position clickPos = new Position(col, row);
 
             if (!clickPos.IsValid()) return;
+
+            // Fire raw click event (used for freeze target selection)
+            OnBoardClicked?.Invoke(clickPos);
 
             Position selected = gameLogic.GameState.SelectedPosition;
 

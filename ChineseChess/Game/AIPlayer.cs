@@ -45,6 +45,7 @@ namespace ChineseChess.Game
             // 評估所有可能的移動
             foreach (Piece piece in piecesToEval)
             {
+                if (piece.IsFrozen) continue;
                 List<Position> possibleMoves = gameLogic.GetPossibleMoves(piece.Position);
 
                 foreach (Position target in possibleMoves)
@@ -68,6 +69,74 @@ namespace ChineseChess.Game
             }
 
             return null;
+        }
+
+        // AI card decision: returns best card to use, or null if no card should be used
+        public Models.Card GetCardToUse(GameLogic gameLogic)
+        {
+            PlayerColor aiColor = gameLogic.GameState.CurrentPlayer;
+            Hand hand = gameLogic.CardManager.GetHand(aiColor);
+
+            if (hand.Count == 0 || gameLogic.GameState.CardUsedThisTurn)
+                return null;
+
+            // Prioritize K (skip opponent) then J (freeze) then highest duel card
+            Models.Card kCard = null;
+            Models.Card jCard = null;
+            Models.Card bestDuel = null;
+
+            foreach (Models.Card card in hand.Cards)
+            {
+                if (card.Effect == Models.CardEffect.SkipOpponent) kCard = card;
+                else if (card.Effect == Models.CardEffect.Freeze) jCard = card;
+                else if (card.Effect == Models.CardEffect.Duel)
+                {
+                    if (bestDuel == null || card.GetDuelValue() > bestDuel.GetDuelValue())
+                        bestDuel = card;
+                }
+            }
+
+            // Use K if available
+            if (kCard != null) return kCard;
+            // Use high duel card (A or 10+)
+            if (bestDuel != null && bestDuel.GetDuelValue() >= 10) return bestDuel;
+            // Use J to freeze opponent's strongest piece
+            if (jCard != null) return jCard;
+
+            return null;
+        }
+
+        // AI picks the best duel card to respond with
+        public Models.Card GetDuelResponse(GameLogic gameLogic, int attackerValue)
+        {
+            PlayerColor aiColor = gameLogic.GameState.CurrentPlayer;
+            Hand hand = gameLogic.CardManager.GetHand(aiColor);
+
+            Models.Card best = null;
+            foreach (Models.Card card in hand.Cards)
+            {
+                if (card.Effect != Models.CardEffect.Duel) continue;
+                if (best == null || card.GetDuelValue() > best.GetDuelValue())
+                    best = card;
+            }
+            return best;
+        }
+
+        // AI picks which opponent piece to freeze (strongest non-general piece)
+        public Position GetFreezeTarget(GameLogic gameLogic)
+        {
+            PlayerColor aiColor = gameLogic.GameState.CurrentPlayer;
+            PlayerColor opponent = aiColor == PlayerColor.Red ? PlayerColor.Black : PlayerColor.Red;
+
+            Piece best = null;
+            int bestVal = -1;
+            foreach (Piece p in gameLogic.Board.GetPiecesByColor(opponent).ToList())
+            {
+                if (p.Type == PieceType.General) continue;
+                int val = GetPieceValue(p.Type);
+                if (val > bestVal) { bestVal = val; best = p; }
+            }
+            return best != null ? best.Position : new Position(-1, -1);
         }
 
         private int EvaluateMove(Piece piece, Position target, GameLogic gameLogic)

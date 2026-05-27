@@ -6,6 +6,7 @@ namespace ChineseChess.Models
         public PlayerColor Color { get; set; }
         public Position Position { get; set; }
         public bool IsAlive { get; set; }
+        public bool IsFrozen { get; set; }
 
         public Piece(PieceType type, PlayerColor color, Position position)
         {
@@ -13,6 +14,7 @@ namespace ChineseChess.Models
             Color = color;
             Position = position;
             IsAlive = true;
+            IsFrozen = false;
         }
 
         public override string ToString()

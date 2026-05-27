@@ -1,4 +1,6 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Windows.Forms;
 using ChineseChess.UI;
@@ -19,32 +21,61 @@ namespace ChineseChess
         private Timer aiTimer;
         private AIPlayer aiPlayer;
 
+        // Card panels
+        private CardPanel redCardPanel;
+        private CardPanel blackCardPanel;
+
+        // Audio
+        private AudioManager audioManager;
+        private AudioPanel audioPanel;
+
+        // Card effect processor
+        private CardEffectProcessor cardEffectProcessor;
+
+        // Freeze selection mode
+        private bool selectingFreezeTarget = false;
+
         public frmChineseChess()
         {
             InitializeComponent();
             this.AutoScaleMode = AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(900, 620);
-            this.MinimumSize = new System.Drawing.Size(750, 520);
+            this.ClientSize = new System.Drawing.Size(1100, 820);
+            this.MinimumSize = new System.Drawing.Size(800, 600);
             aiPlayer = new AIPlayer();
             InitializeUI();
             SetupGame();
             InitializeAITimer();
-            // Resize 事件在 InitializeUI 後掛載，避免控件未初始化時被呼叫
+            InitializeAudio();
             this.Resize += (s, e) => UpdateLayout();
-            // 初始化後立即執行一次布局
             UpdateLayout();
         }
 
         private void InitializeAITimer()
         {
             aiTimer = new Timer();
-            aiTimer.Interval = 1000; // 1 秒延遲，讓遊戲更流暢
-            aiTimer.Tick += (s, e) => ExecuteAIMove();
+            aiTimer.Interval = 1000;
+            aiTimer.Tick += (s, e) => ExecuteAITurn();
+        }
+
+        private void InitializeAudio()
+        {
+            audioManager = new AudioManager();
+            string musicDir = Path.Combine(Application.StartupPath, "Resources", "Music");
+            if (Directory.Exists(musicDir))
+            {
+                string[] mp3Files = Directory.GetFiles(musicDir, "*.mp3");
+                if (mp3Files.Length > 0)
+                {
+                    audioManager.LoadPlaylist(mp3Files);
+                    audioManager.Play();
+                }
+            }
+            audioPanel.SetAudioManager(audioManager);
         }
 
         private void InitializeUI()
         {
-            // 菜單
+            // Menu
             menuStrip = new MenuStrip();
             ToolStripMenuItem fileMenu = new ToolStripMenuItem("文件");
             fileMenu.DropDownItems.Add(new ToolStripMenuItem("新遊戲", null, (s, e) => NewGame()));
@@ -62,7 +93,7 @@ namespace ChineseChess
             this.MainMenuStrip = menuStrip;
             this.Controls.Add(menuStrip);
 
-            // 狀態標籤
+            // Status label
             lblStatus = new Label
             {
                 Text = "狀態：紅方先手",
@@ -72,22 +103,41 @@ namespace ChineseChess
             };
             this.Controls.Add(lblStatus);
 
-            // 棋盤
+            // Black card panel (above board)
+            blackCardPanel = new CardPanel(PlayerColor.Black)
+            {
+                Location = new System.Drawing.Point(10, 55),
+                IsInteractive = false
+            };
+            blackCardPanel.CardClicked += OnCardClicked;
+            this.Controls.Add(blackCardPanel);
+
+            // Chess board
             boardPanel = new BoardPanel
             {
-                Location = new System.Drawing.Point(10, 60),
+                Location = new System.Drawing.Point(10, 175),
                 Size = new System.Drawing.Size(450, 450)
             };
-            boardPanel.OnMoveMade += (from, to) => UpdateStatus();
+            boardPanel.OnMoveMade += (from, to) => OnMoveMade(from, to);
+            boardPanel.OnBoardClicked += OnBoardClickedForFreeze;
             this.Controls.Add(boardPanel);
 
-            // 按鈕
+            // Red card panel (below board)
+            redCardPanel = new CardPanel(PlayerColor.Red)
+            {
+                Location = new System.Drawing.Point(10, 635)
+            };
+            redCardPanel.CardClicked += OnCardClicked;
+            this.Controls.Add(redCardPanel);
+
+            // Right panel controls
             int btnX = 470;
+
             btnNewGame = new Button
             {
                 Text = "新遊戲",
                 Location = new System.Drawing.Point(btnX, 60),
-                Size = new System.Drawing.Size(100, 40)
+                Size = new System.Drawing.Size(120, 40)
             };
             btnNewGame.Click += (s, e) => NewGame();
             this.Controls.Add(btnNewGame);
@@ -96,7 +146,7 @@ namespace ChineseChess
             {
                 Text = "悔棋",
                 Location = new System.Drawing.Point(btnX, 110),
-                Size = new System.Drawing.Size(100, 40)
+                Size = new System.Drawing.Size(120, 40)
             };
             btnUndo.Click += (s, e) => Undo();
             this.Controls.Add(btnUndo);
@@ -105,12 +155,11 @@ namespace ChineseChess
             {
                 Text = "認輸",
                 Location = new System.Drawing.Point(btnX, 160),
-                Size = new System.Drawing.Size(100, 40)
+                Size = new System.Drawing.Size(120, 40)
             };
             btnGiveUp.Click += (s, e) => GiveUp();
             this.Controls.Add(btnGiveUp);
 
-            // 移動歷史
             Label lblHistory = new Label
             {
                 Text = "移動歷史：",
@@ -122,13 +171,23 @@ namespace ChineseChess
             lbMoveHistory = new ListBox
             {
                 Location = new System.Drawing.Point(btnX, 235),
-                Size = new System.Drawing.Size(100, 275)
+                Size = new System.Drawing.Size(120, 200)
             };
             this.Controls.Add(lbMoveHistory);
+
+            // Audio panel
+            audioPanel = new AudioPanel
+            {
+                Location = new System.Drawing.Point(btnX, 445),
+                Size = new System.Drawing.Size(120, 90)
+            };
+            this.Controls.Add(audioPanel);
         }
 
         private void SetupGame()
         {
+            cardEffectProcessor = new CardEffectProcessor(boardPanel.GameLogic);
+            UpdateCardPanels();
             UpdateStatus();
         }
 
@@ -137,32 +196,40 @@ namespace ChineseChess
             if (boardPanel == null || menuStrip == null) return;
 
             const int margin = 10;
-            const int rightPanelWidth = 160;
-            const int topOffset = 55; // 菜單欄 + 狀態列
+            const int rightPanelWidth = 170;
+            const int cardPanelH = 110;
+            const int topOffset = 55;
+            const int bottomMargin = 15;
 
-            // 可用空間（扣除右側面板和邊距）
             int availW = this.ClientSize.Width - rightPanelWidth - margin * 3;
-            int availH = this.ClientSize.Height - topOffset - margin;
+            int availH = this.ClientSize.Height - topOffset - cardPanelH * 2 - margin * 2 - bottomMargin;
 
-            // 根據棋盤比例（8列:9行 的交叉點間距）計算棋格大小
-            // 加上 margin*2 給 BoardPanel 的留白
             const int boardMargin = 30;
             int cellByW = (availW - boardMargin * 2) / 8;
             int cellByH = (availH - boardMargin * 2) / 9;
             int cell = Math.Max(Math.Min(cellByW, cellByH), 30);
 
-            // 棋盤控件大小：棋格 + 留白
             int boardW = 8 * cell + boardMargin * 2;
             int boardH = 9 * cell + boardMargin * 2;
 
-            boardPanel.Location = new System.Drawing.Point(margin, topOffset);
+            // Black card panel (above board)
+            blackCardPanel.Location = new System.Drawing.Point(margin, topOffset);
+            blackCardPanel.Size = new System.Drawing.Size(boardW, cardPanelH);
+
+            // Board
+            int boardTop = topOffset + cardPanelH + margin;
+            boardPanel.Location = new System.Drawing.Point(margin, boardTop);
             boardPanel.Size = new System.Drawing.Size(boardW, boardH);
             boardPanel.Invalidate();
 
-            // 右側面板
+            // Red card panel (below board)
+            int redPanelTop = boardTop + boardH + margin;
+            redCardPanel.Location = new System.Drawing.Point(margin, redPanelTop);
+            redCardPanel.Size = new System.Drawing.Size(boardW, cardPanelH);
+
+            // Right panel
             int rightX = boardPanel.Right + margin;
-            int rightW = this.ClientSize.Width - rightX - margin;
-            if (rightW < 100) rightW = 100;
+            int rightW = Math.Max(this.ClientSize.Width - rightX - margin, 120);
 
             lblStatus.Location = new System.Drawing.Point(rightX, topOffset);
             lblStatus.Width = rightW;
@@ -176,7 +243,7 @@ namespace ChineseChess
             btnGiveUp.Location = new System.Drawing.Point(rightX, topOffset + 130);
             btnGiveUp.Width = rightW;
 
-            Label lblHistory = this.Controls.Cast<Control>()
+            Label lblHistory = this.Controls.Cast<System.Windows.Forms.Control>()
                 .OfType<Label>()
                 .FirstOrDefault(l => l.Text == "移動歷史：");
             if (lblHistory != null)
@@ -184,7 +251,11 @@ namespace ChineseChess
 
             lbMoveHistory.Location = new System.Drawing.Point(rightX, topOffset + 210);
             lbMoveHistory.Size = new System.Drawing.Size(rightW,
-                this.ClientSize.Height - (topOffset + 210) - margin);
+                this.ClientSize.Height - (topOffset + 210) - 100 - margin);
+
+            audioPanel.Location = new System.Drawing.Point(rightX,
+                this.ClientSize.Height - 100 - margin);
+            audioPanel.Size = new System.Drawing.Size(rightW, 95);
         }
 
         private void UpdateStatus()
@@ -192,9 +263,17 @@ namespace ChineseChess
             GameLogic logic = boardPanel.GameLogic;
             GameState state = logic.GameState;
 
-            string statusText = $"狀態：{(state.CurrentPlayer == PlayerColor.Red ? "紅" : "黑")}方";
+            string player = state.CurrentPlayer == PlayerColor.Red ? "紅" : "黑";
+            string statusText = $"狀態：{player}方回合";
+
+            if (state.MovesRemainingThisTurn > 1)
+                statusText += $" (剩餘移動: {state.MovesRemainingThisTurn})";
+
             if (state.IsInCheck)
                 statusText += " [將軍！]";
+
+            if (selectingFreezeTarget)
+                statusText = "請點擊對方棋子施加凍結";
 
             switch (state.Status)
             {
@@ -221,7 +300,7 @@ namespace ChineseChess
 
             lblStatus.Text = statusText;
 
-            // 更新移動歷史
+            // Update move history
             lbMoveHistory.Items.Clear();
             int moveIndex = 1;
             foreach (Move move in logic.MoveHistory)
@@ -235,25 +314,185 @@ namespace ChineseChess
 
             if (lbMoveHistory.Items.Count > 0)
                 lbMoveHistory.SelectedIndex = lbMoveHistory.Items.Count - 1;
+
+            UpdateCardPanels();
+        }
+
+        private void UpdateCardPanels()
+        {
+            GameLogic logic = boardPanel.GameLogic;
+            GameState state = logic.GameState;
+
+            redCardPanel.SetHand(logic.CardManager.RedHand);
+            blackCardPanel.SetHand(logic.CardManager.BlackHand);
+
+            // Only allow clicking cards for the current player
+            bool gameActive = state.Status == GameStatus.Playing && !selectingFreezeTarget;
+            bool isAITurn = state.Mode == GameMode.PlayerVsAI && state.CurrentPlayer == PlayerColor.Black;
+
+            redCardPanel.IsInteractive = gameActive && !isAITurn && state.CurrentPlayer == PlayerColor.Red && !state.CardUsedThisTurn;
+            blackCardPanel.IsInteractive = gameActive && !isAITurn && state.CurrentPlayer == PlayerColor.Black && !state.CardUsedThisTurn;
+
+            redCardPanel.Invalidate();
+            blackCardPanel.Invalidate();
+        }
+
+        private void OnMoveMade(Position from, Position to)
+        {
+            UpdateStatus();
+
+            GameState state = boardPanel.GameLogic.GameState;
+            if (state.Mode == GameMode.PlayerVsAI && state.CurrentPlayer == PlayerColor.Black
+                && state.Status == GameStatus.Playing)
+            {
+                aiTimer.Start();
+            }
+        }
+
+        private void OnBoardClickedForFreeze(Position pos)
+        {
+            if (!selectingFreezeTarget) return;
+
+            GameLogic logic = boardPanel.GameLogic;
+            Piece piece = logic.Board.GetPiece(pos);
+
+            if (piece != null && piece.Color != logic.GameState.CurrentPlayer)
+            {
+                bool frozen = cardEffectProcessor.ProcessFreeze(pos);
+                if (frozen)
+                {
+                    selectingFreezeTarget = false;
+                    MessageBox.Show($"已凍結 {piece}，下回合無法移動！", "凍結", MessageBoxButtons.OK);
+                    UpdateStatus();
+                    boardPanel.Invalidate();
+                }
+            }
+        }
+
+        private void OnCardClicked(Card card)
+        {
+            GameLogic logic = boardPanel.GameLogic;
+            GameState state = logic.GameState;
+
+            if (state.Status != GameStatus.Playing) return;
+            if (state.CardUsedThisTurn) return;
+            if (selectingFreezeTarget) return;
+
+            PlayerColor current = state.CurrentPlayer;
+
+            // Mark card as used and remove from hand
+            state.CardUsedThisTurn = true;
+            logic.CardManager.UseCard(current, card);
+
+            switch (card.Effect)
+            {
+                case CardEffect.Duel:
+                    HandleDuel(current, card);
+                    break;
+
+                case CardEffect.Freeze:
+                    selectingFreezeTarget = true;
+                    MessageBox.Show("請在棋盤上點擊要凍結的對方棋子", "J 牌 - 凍結", MessageBoxButtons.OK);
+                    break;
+
+                case CardEffect.Revive:
+                    HandleRevive(current);
+                    break;
+
+                case CardEffect.SkipOpponent:
+                    cardEffectProcessor.ProcessSkipOpponent();
+                    PlayerColor opponent = current == PlayerColor.Red ? PlayerColor.Black : PlayerColor.Red;
+                    MessageBox.Show($"K 牌效果：{(opponent == PlayerColor.Red ? "紅" : "黑")}方下回合跳過！", "K 牌 - 跳過", MessageBoxButtons.OK);
+                    break;
+            }
+
+            UpdateStatus();
+            boardPanel.Invalidate();
+        }
+
+        private void HandleDuel(PlayerColor attacker, Card attackerCard)
+        {
+            GameLogic logic = boardPanel.GameLogic;
+            GameState state = logic.GameState;
+            PlayerColor defender = attacker == PlayerColor.Red ? PlayerColor.Black : PlayerColor.Red;
+            Hand defenderHand = logic.CardManager.GetHand(defender);
+
+            Card defenderCard = null;
+
+            if (state.Mode == GameMode.PlayerVsAI && defender == PlayerColor.Black)
+            {
+                // AI picks a duel card
+                defenderCard = aiPlayer.GetDuelResponse(logic, attackerCard.GetDuelValue());
+                if (defenderCard != null)
+                    logic.CardManager.UseCard(defender, defenderCard);
+            }
+            else
+            {
+                // Human defender selects card via dialog
+                using (DuelDialog dlg = new DuelDialog(attackerCard, defender, defenderHand))
+                {
+                    if (dlg.ShowDialog(this) == DialogResult.OK)
+                    {
+                        defenderCard = dlg.SelectedDefenderCard;
+                        if (defenderCard != null)
+                            logic.CardManager.UseCard(defender, defenderCard);
+                    }
+                }
+            }
+
+            DuelResult result = cardEffectProcessor.ProcessDuel(attacker, attackerCard, defenderCard);
+
+            string msg;
+            string attackerName = attacker == PlayerColor.Red ? "紅" : "黑";
+            string defenderName = defender == PlayerColor.Red ? "紅" : "黑";
+
+            if (result.Tie)
+            {
+                msg = $"對決平手！（{result.AttackerValue} vs {result.DefenderValue}）\n雙方各補一張牌。";
+            }
+            else if (result.Winner == attacker)
+            {
+                msg = $"{attackerName}方勝！（{result.AttackerValue} vs {result.DefenderValue}）\n{attackerName}方獲得額外移動機會！";
+            }
+            else
+            {
+                msg = $"{defenderName}方勝！（{result.DefenderValue} vs {result.AttackerValue}）\n{defenderName}方下回合獲得額外移動機會！";
+            }
+
+            MessageBox.Show(msg, "對決結果", MessageBoxButtons.OK);
+        }
+
+        private void HandleRevive(PlayerColor player)
+        {
+            GameLogic logic = boardPanel.GameLogic;
+            List<Piece> captured = player == PlayerColor.Red ? logic.CapturedRed : logic.CapturedBlack;
+
+            using (ReviveDialog dlg = new ReviveDialog(captured, player))
+            {
+                if (dlg.ShowDialog(this) == DialogResult.OK && dlg.SelectedPiece != null)
+                {
+                    bool ok = cardEffectProcessor.ProcessRevive(dlg.SelectedPiece);
+                    if (ok)
+                        MessageBox.Show($"已復活 {dlg.SelectedPiece}！", "Q 牌 - 復活", MessageBoxButtons.OK);
+                }
+            }
         }
 
         private void NewGame()
         {
             DialogResult result = MessageBox.Show("選擇遊戲模式\n\nYES: 雙人對戰\nNO: 玩家 vs AI", "新遊戲", MessageBoxButtons.YesNo);
             if (result == DialogResult.Yes)
-            {
                 StartPvP();
-            }
             else
-            {
                 StartPlayerVsAI();
-            }
         }
 
         private void StartPvP()
         {
             boardPanel.GameLogic.SetGameMode(GameMode.PvP);
             boardPanel.ResetGame();
+            selectingFreezeTarget = false;
+            cardEffectProcessor = new CardEffectProcessor(boardPanel.GameLogic);
             aiTimer.Stop();
             UpdateStatus();
         }
@@ -262,22 +501,90 @@ namespace ChineseChess
         {
             boardPanel.GameLogic.SetGameMode(GameMode.PlayerVsAI);
             boardPanel.ResetGame();
+            selectingFreezeTarget = false;
+            cardEffectProcessor = new CardEffectProcessor(boardPanel.GameLogic);
             aiTimer.Start();
             UpdateStatus();
         }
 
-        private void ExecuteAIMove()
+        private void ExecuteAITurn()
         {
             GameLogic logic = boardPanel.GameLogic;
+            GameState state = logic.GameState;
 
-            // 只在AI模式且黑方回合時執行
-            if (logic.GameState.Mode != GameMode.PlayerVsAI ||
-                logic.GameState.CurrentPlayer != PlayerColor.Black ||
-                logic.GameState.Status != GameStatus.Playing)
+            if (state.Mode != GameMode.PlayerVsAI ||
+                state.CurrentPlayer != PlayerColor.Black ||
+                state.Status != GameStatus.Playing)
             {
+                aiTimer.Stop();
                 return;
             }
 
+            aiTimer.Stop();
+
+            // AI card use
+            if (!state.CardUsedThisTurn)
+            {
+                Card cardToUse = aiPlayer.GetCardToUse(logic);
+                if (cardToUse != null)
+                {
+                    state.CardUsedThisTurn = true;
+                    logic.CardManager.UseCard(PlayerColor.Black, cardToUse);
+
+                    switch (cardToUse.Effect)
+                    {
+                        case CardEffect.SkipOpponent:
+                            cardEffectProcessor.ProcessSkipOpponent();
+                            MessageBox.Show("黑方使用 K 牌：紅方下回合跳過！", "AI 出牌", MessageBoxButtons.OK);
+                            break;
+
+                        case CardEffect.Freeze:
+                            Position freezePos = aiPlayer.GetFreezeTarget(logic);
+                            if (freezePos.IsValid())
+                            {
+                                cardEffectProcessor.ProcessFreeze(freezePos);
+                                Piece frozen = logic.Board.GetPiece(freezePos);
+                                MessageBox.Show($"黑方使用 J 牌：凍結 {frozen}！", "AI 出牌", MessageBoxButtons.OK);
+                            }
+                            break;
+
+                        case CardEffect.Revive:
+                            if (logic.CapturedBlack.Count > 0)
+                            {
+                                cardEffectProcessor.ProcessRevive(logic.CapturedBlack[0]);
+                                MessageBox.Show("黑方使用 Q 牌：復活棋子！", "AI 出牌", MessageBoxButtons.OK);
+                            }
+                            break;
+
+                        case CardEffect.Duel:
+                            // AI triggers duel against player
+                            Hand playerHand = logic.CardManager.GetHand(PlayerColor.Red);
+                            Card playerCard = null;
+                            using (DuelDialog dlg = new DuelDialog(cardToUse, PlayerColor.Red, playerHand))
+                            {
+                                if (dlg.ShowDialog(this) == DialogResult.OK)
+                                {
+                                    playerCard = dlg.SelectedDefenderCard;
+                                    if (playerCard != null)
+                                        logic.CardManager.UseCard(PlayerColor.Red, playerCard);
+                                }
+                            }
+                            DuelResult result = cardEffectProcessor.ProcessDuel(PlayerColor.Black, cardToUse, playerCard);
+                            string msg = result.Tie
+                                ? "對決平手！雙方各補一張牌。"
+                                : result.Winner == PlayerColor.Black
+                                    ? $"黑方勝！（{result.AttackerValue} vs {result.DefenderValue}）黑方獲得額外移動！"
+                                    : $"紅方勝！（{result.DefenderValue} vs {result.AttackerValue}）紅方下回合獲得額外移動！";
+                            MessageBox.Show(msg, "對決結果", MessageBoxButtons.OK);
+                            break;
+                    }
+
+                    UpdateStatus();
+                    boardPanel.Invalidate();
+                }
+            }
+
+            // AI chess move
             Move aiMove = aiPlayer.GetNextMove(logic);
             if (aiMove != null)
             {
@@ -285,6 +592,17 @@ namespace ChineseChess
                 boardPanel.GameState.SelectedPosition = new Position(-1, -1);
                 UpdateStatus();
                 boardPanel.Invalidate();
+            }
+
+            // If AI has bonus moves left, schedule another turn
+            if (state.CurrentPlayer == PlayerColor.Black && state.Status == GameStatus.Playing && state.MovesRemainingThisTurn > 0)
+            {
+                aiTimer.Start();
+            }
+            else if (state.CurrentPlayer == PlayerColor.Red && state.Status == GameStatus.Playing)
+            {
+                // Player's turn: if player has bonus move from defender win, just update UI
+                UpdateStatus();
             }
         }
 
@@ -299,9 +617,7 @@ namespace ChineseChess
             if (dialog.ShowDialog() == DialogResult.OK)
             {
                 if (GameSerializer.SaveGame(boardPanel.GameLogic, dialog.FileName))
-                {
                     MessageBox.Show("遊戲已保存：" + dialog.FileName);
-                }
             }
         }
 
@@ -317,13 +633,12 @@ namespace ChineseChess
                 GameLogic loaded = GameSerializer.LoadGame(dialog.FileName);
                 if (loaded != null)
                 {
-                    // 替換當前遊戲邏輯
                     boardPanel.LoadGameLogic(loaded);
+                    selectingFreezeTarget = false;
+                    cardEffectProcessor = new CardEffectProcessor(boardPanel.GameLogic);
                     aiTimer.Stop();
                     if (loaded.GameState.Mode == GameMode.PlayerVsAI)
-                    {
                         aiTimer.Start();
-                    }
                     UpdateStatus();
                     boardPanel.Invalidate();
                     MessageBox.Show("遊戲已讀取");
@@ -335,6 +650,7 @@ namespace ChineseChess
         {
             if (boardPanel.GameLogic.Undo())
             {
+                selectingFreezeTarget = false;
                 UpdateStatus();
                 boardPanel.Invalidate();
             }
@@ -350,6 +666,12 @@ namespace ChineseChess
                 UpdateStatus();
                 boardPanel.Invalidate();
             }
+        }
+
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            audioManager?.Dispose();
+            base.OnFormClosed(e);
         }
     }
 }
