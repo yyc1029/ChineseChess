@@ -208,7 +208,7 @@ namespace ChineseChess.Game
             if (general == null) return false;
 
             PlayerColor opponent = color == PlayerColor.Red ? PlayerColor.Black : PlayerColor.Red;
-            foreach (Piece enemy in board.GetPiecesByColor(opponent))
+            foreach (Piece enemy in board.GetPiecesByColor(opponent).ToList())
             {
                 if (moveValidator.IsValidMove(enemy, general.Position, board))
                     return true;
@@ -221,7 +221,7 @@ namespace ChineseChess.Game
         {
             if (!IsInCheck(color)) return false;
 
-            foreach (Piece piece in board.GetPiecesByColor(color))
+            foreach (Piece piece in board.GetPiecesByColor(color).ToList())
             {
                 if (piece.IsFrozen) continue;
                 for (int x = 0; x <= 8; x++)
