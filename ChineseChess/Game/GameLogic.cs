@@ -86,17 +86,18 @@ namespace ChineseChess.Game
             // Handle remaining moves (bonus from duel win)
             gameState.MovesRemainingThisTurn--;
 
-            if (gameState.MovesRemainingThisTurn <= 0)
+            PlayerColor opponentColor = gameState.CurrentPlayer == PlayerColor.Red ? PlayerColor.Black : PlayerColor.Red;
+            bool opponentNowInCheck = IsInCheck(opponentColor);
+
+            if (opponentNowInCheck || gameState.MovesRemainingThisTurn <= 0)
             {
+                // End turn: opponent in check must respond, or no more bonus moves
+                gameState.MovesRemainingThisTurn = 0;
                 EndTurn();
             }
             else
             {
-                // Still has bonus move(s) - check opponent for display purposes
-                PlayerColor opponent = gameState.CurrentPlayer == PlayerColor.Red ? PlayerColor.Black : PlayerColor.Red;
-                gameState.IsInCheck = IsInCheck(opponent);
-                if (gameState.IsInCheck && IsCheckmate(opponent))
-                    gameState.Status = opponent == PlayerColor.Red ? GameStatus.BlackWin : GameStatus.RedWin;
+                gameState.IsInCheck = false;
             }
 
             return true;

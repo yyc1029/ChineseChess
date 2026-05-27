@@ -49,7 +49,18 @@ namespace ChineseChess
             InitializeAudio();
             this.Resize += (s, e) => UpdateLayout();
             UpdateLayout();
-            this.Load += (s, e) => { using (var dlg = new RulesDialog()) dlg.ShowDialog(this); };
+            this.Load += (s, e) =>
+            {
+                using (var rules = new RulesDialog()) rules.ShowDialog(this);
+                using (var mode = new GameModeDialog())
+                {
+                    mode.ShowDialog(this);
+                    if (mode.Choice == GameModeDialog.ModeChoice.AI)
+                        StartPlayerVsAI();
+                    else
+                        StartPvP();
+                }
+            };
         }
 
         private void InitializeAITimer()
@@ -193,6 +204,61 @@ namespace ChineseChess
                 Size = new System.Drawing.Size(120, 145)
             };
             this.Controls.Add(audioPanel);
+
+            ApplyDarkTheme();
+        }
+
+        private void ApplyDarkTheme()
+        {
+            this.BackColor = System.Drawing.Color.FromArgb(50, 40, 30);
+
+            menuStrip.BackColor = System.Drawing.Color.FromArgb(40, 30, 20);
+            menuStrip.ForeColor = System.Drawing.Color.FromArgb(220, 200, 150);
+            foreach (System.Windows.Forms.ToolStripItem item in menuStrip.Items)
+            {
+                item.ForeColor = System.Drawing.Color.FromArgb(220, 200, 150);
+                item.BackColor = System.Drawing.Color.FromArgb(40, 30, 20);
+                System.Windows.Forms.ToolStripMenuItem menuItem = item as System.Windows.Forms.ToolStripMenuItem;
+                if (menuItem != null)
+                {
+                    foreach (System.Windows.Forms.ToolStripItem sub in menuItem.DropDownItems)
+                    {
+                        sub.ForeColor = System.Drawing.Color.FromArgb(200, 180, 130);
+                        sub.BackColor = System.Drawing.Color.FromArgb(50, 40, 30);
+                    }
+                }
+            }
+
+            StyleButton(btnNewGame);
+            StyleButton(btnUndo);
+            StyleButton(btnGiveUp);
+            StyleButton(btnRules);
+
+            lblStatus.ForeColor = System.Drawing.Color.FromArgb(220, 200, 150);
+            lblStatus.BackColor = System.Drawing.Color.Transparent;
+            lblStatus.Font = new System.Drawing.Font("微軟正黑體", 11, System.Drawing.FontStyle.Bold);
+
+            Label lblHistory = this.Controls.Cast<System.Windows.Forms.Control>()
+                .OfType<Label>()
+                .FirstOrDefault(l => l.Text == "移動歷史：");
+            if (lblHistory != null)
+            {
+                lblHistory.ForeColor = System.Drawing.Color.FromArgb(180, 160, 120);
+                lblHistory.BackColor = System.Drawing.Color.Transparent;
+            }
+
+            lbMoveHistory.BackColor = System.Drawing.Color.FromArgb(35, 28, 18);
+            lbMoveHistory.ForeColor = System.Drawing.Color.FromArgb(200, 180, 130);
+            lbMoveHistory.BorderStyle = BorderStyle.FixedSingle;
+        }
+
+        private void StyleButton(Button btn)
+        {
+            btn.FlatStyle = FlatStyle.Flat;
+            btn.BackColor = System.Drawing.Color.FromArgb(80, 60, 40);
+            btn.ForeColor = System.Drawing.Color.White;
+            btn.Font = new System.Drawing.Font("微軟正黑體", 10, System.Drawing.FontStyle.Bold);
+            btn.FlatAppearance.BorderColor = System.Drawing.Color.FromArgb(120, 100, 60);
         }
 
         private void SetupGame()

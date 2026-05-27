@@ -6,7 +6,7 @@ namespace ChineseChess.UI
     public class GameModeDialog : Form
     {
         public enum ModeChoice { PvP, AI, Cancel }
-        public ModeChoice Choice { get; private set; } = ModeChoice.Cancel;
+        public ModeChoice Choice { get; private set; } = ModeChoice.PvP;
 
         public GameModeDialog()
         {

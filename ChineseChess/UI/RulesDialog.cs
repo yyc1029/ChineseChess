@@ -9,7 +9,7 @@ namespace ChineseChess.UI
         {
             Text = "遊戲規則";
             Width = 520;
-            Height = 530;
+            Height = 560;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = false;
@@ -33,7 +33,7 @@ namespace ChineseChess.UI
             Button btnOK = new Button
             {
                 Text = "明白了！",
-                Location = new System.Drawing.Point(195, 467),
+                Location = new System.Drawing.Point(195, 475),
                 Size = new System.Drawing.Size(110, 35),
                 DialogResult = DialogResult.OK,
                 BackColor = Color.FromArgb(80, 60, 40),
