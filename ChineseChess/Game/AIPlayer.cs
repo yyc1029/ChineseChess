@@ -5,6 +5,13 @@ using ChineseChess.Models;
 
 namespace ChineseChess.Game
 {
+    public class MoveScore
+    {
+        public Position From { get; set; }
+        public Position To { get; set; }
+        public int Score { get; set; }
+    }
+
     public class AIPlayer
     {
         private Random random = new Random();
@@ -30,7 +37,7 @@ namespace ChineseChess.Game
             Board board = gameLogic.Board;
             PlayerColor aiColor = gameLogic.GameState.CurrentPlayer;
 
-            List<(Position from, Position to, int score)> moves = new List<(Position, Position, int)>();
+            List<MoveScore> moves = new List<MoveScore>();
 
             // 評估所有可能的移動
             foreach (Piece piece in board.GetPiecesByColor(aiColor))
@@ -40,7 +47,7 @@ namespace ChineseChess.Game
                 foreach (Position target in possibleMoves)
                 {
                     int score = EvaluateMove(piece, target, gameLogic);
-                    moves.Add((piece.Position, target, score));
+                    moves.Add(new MoveScore { From = piece.Position, To = target, Score = score });
                 }
             }
 
@@ -48,13 +55,13 @@ namespace ChineseChess.Game
                 return null;
 
             // 選擇最高分的移動（加入一些隨機性以避免AI太可預測）
-            int maxScore = moves.Max(m => m.score);
-            List<(Position, Position, int)> bestMoves = moves.Where(m => m.score >= maxScore - 50).ToList();
+            int maxScore = moves.Max(m => m.Score);
+            List<MoveScore> bestMoves = moves.Where(m => m.Score >= maxScore - 50).ToList();
 
             if (bestMoves.Count > 0)
             {
                 int index = random.Next(bestMoves.Count);
-                return new Move(bestMoves[index].from, bestMoves[index].to);
+                return new Move(bestMoves[index].From, bestMoves[index].To);
             }
 
             return null;

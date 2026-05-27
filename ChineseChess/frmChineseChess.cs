@@ -68,8 +68,7 @@ namespace ChineseChess
             boardPanel = new BoardPanel
             {
                 Location = new System.Drawing.Point(10, 60),
-                Size = new System.Drawing.Size(450, 450),
-                BorderStyle = BorderStyle.FixedSingle
+                Size = new System.Drawing.Size(450, 450)
             };
             boardPanel.OnMoveMade += (from, to) => UpdateStatus();
             this.Controls.Add(boardPanel);

@@ -3,11 +3,13 @@ using System.Media;
 
 namespace ChineseChess.UI
 {
+#pragma warning disable CS0169
     public class SoundManager
     {
         private SoundPlayer moveSound;
         private SoundPlayer captureSound;
         private SoundPlayer checkSound;
+#pragma warning restore CS0169
 
         public SoundManager()
         {

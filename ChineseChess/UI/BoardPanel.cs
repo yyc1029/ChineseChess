@@ -23,6 +23,8 @@ namespace ChineseChess.UI
             BackColor = Color.SandyBrown;
             gameLogic = new GameLogic();
             soundManager = new SoundManager();
+            Width = 450;
+            Height = 450;
         }
 
         public GameLogic GameLogic => gameLogic;
