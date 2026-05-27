@@ -12,6 +12,7 @@ namespace ChineseChess.UI
         private GameLogic gameLogic;
         private int cellSize = 50;
         private List<Position> possibleMoves = new List<Position>();
+        private SoundManager soundManager;
 
         public event Action<Position> OnPieceSelected;
         public event Action<Position, Position> OnMoveMade;
@@ -21,6 +22,7 @@ namespace ChineseChess.UI
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.DoubleBuffer, true);
             BackColor = Color.SandyBrown;
             gameLogic = new GameLogic();
+            soundManager = new SoundManager();
         }
 
         public GameLogic GameLogic => gameLogic;
@@ -161,8 +163,19 @@ namespace ChineseChess.UI
             else if (possibleMoves.Contains(clickPos))
             {
                 // 執行移動
+                Piece targetPiece = gameLogic.Board.GetPiece(clickPos);
                 if (gameLogic.MovePiece(selected, clickPos))
                 {
+                    // 播放音效
+                    if (targetPiece != null)
+                        soundManager.PlayCaptureSound();
+                    else
+                        soundManager.PlayMoveSound();
+
+                    // 如果新狀態是將軍，播放將軍音效
+                    if (gameLogic.GameState.IsInCheck)
+                        soundManager.PlayCheckSound();
+
                     OnMoveMade?.Invoke(selected, clickPos);
                 }
                 gameLogic.GameState.SelectedPosition = new Position(-1, -1);
