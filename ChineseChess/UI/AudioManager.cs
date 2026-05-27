@@ -36,6 +36,19 @@ namespace ChineseChess.UI
             }
         }
 
+        public int CurrentTrackIndex => currentIndex;
+
+        public List<string> TrackNames
+        {
+            get
+            {
+                var names = new List<string>();
+                foreach (string path in playlist)
+                    names.Add(Path.GetFileNameWithoutExtension(path));
+                return names;
+            }
+}
+
         public event EventHandler TrackChanged;
 
         public AudioManager()
@@ -110,6 +123,15 @@ namespace ChineseChess.UI
             if (playlist.Count == 0) return;
             Stop();
             currentIndex = (currentIndex - 1 + playlist.Count) % playlist.Count;
+            PlayCurrent();
+            TrackChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        public void JumpTo(int index)
+        {
+            if (index < 0 || index >= playlist.Count) return;
+            Stop();
+            currentIndex = index;
             PlayCurrent();
             TrackChanged?.Invoke(this, EventArgs.Empty);
         }

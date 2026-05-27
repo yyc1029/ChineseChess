@@ -7,11 +7,19 @@ namespace ChineseChess.Game
 {
     public class GameLogic
     {
+        private class UndoEntry
+        {
+            public Board Board;
+            public Move Move;
+            public List<Piece> SnapCapturedRed;
+            public List<Piece> SnapCapturedBlack;
+        }
+
         private Board board;
         private GameState gameState;
         private MoveValidator moveValidator;
         private Queue<Move> moveHistory;
-        private Stack<(Board, Move)> undoStack;
+        private Stack<UndoEntry> undoStack;
         private CardManager cardManager;
         private List<Piece> capturedRed = new List<Piece>();
         private List<Piece> capturedBlack = new List<Piece>();
@@ -22,7 +30,7 @@ namespace ChineseChess.Game
             gameState = new GameState();
             moveValidator = new MoveValidator();
             moveHistory = new Queue<Move>();
-            undoStack = new Stack<(Board, Move)>();
+            undoStack = new Stack<UndoEntry>();
             cardManager = new CardManager();
         }
 
@@ -233,16 +241,25 @@ namespace ChineseChess.Game
         {
             if (undoStack.Count == 0) return false;
 
-            var (previousBoard, move) = undoStack.Pop();
-            board = previousBoard;
+            UndoEntry entry = undoStack.Pop();
+            board = entry.Board;
 
-            // Restore captured list
-            if (move.CapturedPiece != null)
+            if (entry.Move == null)
             {
-                if (move.CapturedPiece.Color == PlayerColor.Red)
-                    capturedRed.Remove(move.CapturedPiece);
+                // Card action snapshot — restore captured lists, don't switch player
+                capturedRed = entry.SnapCapturedRed;
+                capturedBlack = entry.SnapCapturedBlack;
+                gameState.IsInCheck = IsInCheck(gameState.CurrentPlayer);
+                return true;
+            }
+
+            // Regular chess move undo
+            if (entry.Move.CapturedPiece != null)
+            {
+                if (entry.Move.CapturedPiece.Color == PlayerColor.Red)
+                    capturedRed.Remove(entry.Move.CapturedPiece);
                 else
-                    capturedBlack.Remove(move.CapturedPiece);
+                    capturedBlack.Remove(entry.Move.CapturedPiece);
             }
 
             var allMoves = moveHistory.ToList();
@@ -262,23 +279,37 @@ namespace ChineseChess.Game
             return true;
         }
 
+        public void SaveBoardSnapshot()
+        {
+            undoStack.Push(new UndoEntry
+            {
+                Board = CopyBoard(),
+                Move = null,
+                SnapCapturedRed = new List<Piece>(capturedRed),
+                SnapCapturedBlack = new List<Piece>(capturedBlack)
+            });
+        }
+
+        private Board CopyBoard()
+        {
+            Board copy = new Board();
+            copy.Reset();
+            foreach (Piece piece in board.GetAllPieces())
+                copy.SetPiece(piece.Position, new Piece(piece.Type, piece.Color, piece.Position) { IsAlive = piece.IsAlive, IsFrozen = piece.IsFrozen });
+            return copy;
+        }
+
         private void SaveUndoState(Move move)
         {
-            Board boardCopy = new Board();
-            boardCopy.Reset();
-
-            foreach (Piece piece in board.GetAllPieces())
-                boardCopy.SetPiece(piece.Position, new Piece(piece.Type, piece.Color, piece.Position) { IsAlive = piece.IsAlive, IsFrozen = piece.IsFrozen });
-
-            undoStack.Push((boardCopy, move));
+            undoStack.Push(new UndoEntry { Board = CopyBoard(), Move = move });
         }
 
         private void UndoLastMove()
         {
             if (undoStack.Count == 0) return;
 
-            var (previousBoard, _) = undoStack.Pop();
-            board = previousBoard;
+            UndoEntry entry = undoStack.Pop();
+            board = entry.Board;
 
             var allMoves = moveHistory.ToList();
             if (allMoves.Count > 0)

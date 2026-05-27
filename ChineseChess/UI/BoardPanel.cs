@@ -121,7 +121,7 @@ namespace ChineseChess.UI
             foreach (Piece piece in gameLogic.Board.GetAllPieces().ToList())
             {
                 float cx = startX + piece.Position.X * cellSize;
-                float cy = startY + piece.Position.Y * cellSize;
+                float cy = startY + (9 - piece.Position.Y) * cellSize;
                 float radius = cellSize * 0.42f;
 
                 bool isRed = piece.Color == PlayerColor.Red;
@@ -157,7 +157,7 @@ namespace ChineseChess.UI
             if (selected.X >= 0 && selected.Y >= 0)
             {
                 float cx = startX + selected.X * cellSize;
-                float cy = startY + selected.Y * cellSize;
+                float cy = startY + (9 - selected.Y) * cellSize;
                 float r = cellSize * 0.46f;
                 g.DrawEllipse(new Pen(Color.Yellow, 3), cx - r, cy - r, r * 2, r * 2);
             }
@@ -168,7 +168,7 @@ namespace ChineseChess.UI
                 if (general != null)
                 {
                     float cx = startX + general.Position.X * cellSize;
-                    float cy = startY + general.Position.Y * cellSize;
+                    float cy = startY + (9 - general.Position.Y) * cellSize;
                     float r = cellSize * 0.46f;
                     g.DrawEllipse(new Pen(Color.OrangeRed, 4), cx - r, cy - r, r * 2, r * 2);
                 }
@@ -180,7 +180,7 @@ namespace ChineseChess.UI
             foreach (Position pos in possibleMoves)
             {
                 float cx = startX + pos.X * cellSize;
-                float cy = startY + pos.Y * cellSize;
+                float cy = startY + (9 - pos.Y) * cellSize;
 
                 Piece target = gameLogic.Board.GetPiece(pos);
                 if (target != null)
@@ -204,10 +204,10 @@ namespace ChineseChess.UI
 
             if (cellSize <= 0) return;
 
-            // 將屏幕坐標轉換為棋盤坐標（對齊到最近的交叉點）
+            // 將屏幕坐標轉換為棋盤坐標（視覺翻轉：紅在下，視覺row 0=內部Y 9）
             int col = (int)Math.Round((float)(e.X - startX) / cellSize);
-            int row = (int)Math.Round((float)(e.Y - startY) / cellSize);
-            Position clickPos = new Position(col, row);
+            int visualRow = (int)Math.Round((float)(e.Y - startY) / cellSize);
+            Position clickPos = new Position(col, 9 - visualRow);
 
             if (!clickPos.IsValid()) return;
 

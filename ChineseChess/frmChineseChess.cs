@@ -16,6 +16,7 @@ namespace ChineseChess
         private Button btnNewGame;
         private Button btnUndo;
         private Button btnGiveUp;
+        private Button btnRules;
         private ListBox lbMoveHistory;
         private MenuStrip menuStrip;
         private Timer aiTimer;
@@ -48,6 +49,7 @@ namespace ChineseChess
             InitializeAudio();
             this.Resize += (s, e) => UpdateLayout();
             UpdateLayout();
+            this.Load += (s, e) => { using (var dlg = new RulesDialog()) dlg.ShowDialog(this); };
         }
 
         private void InitializeAITimer()
@@ -160,6 +162,15 @@ namespace ChineseChess
             btnGiveUp.Click += (s, e) => GiveUp();
             this.Controls.Add(btnGiveUp);
 
+            btnRules = new Button
+            {
+                Text = "查看規則",
+                Location = new System.Drawing.Point(btnX, 210),
+                Size = new System.Drawing.Size(120, 40)
+            };
+            btnRules.Click += (s, e) => { using (var dlg = new RulesDialog()) dlg.ShowDialog(this); };
+            this.Controls.Add(btnRules);
+
             Label lblHistory = new Label
             {
                 Text = "移動歷史：",
@@ -178,8 +189,8 @@ namespace ChineseChess
             // Audio panel
             audioPanel = new AudioPanel
             {
-                Location = new System.Drawing.Point(btnX, 445),
-                Size = new System.Drawing.Size(120, 90)
+                Location = new System.Drawing.Point(btnX, 500),
+                Size = new System.Drawing.Size(120, 145)
             };
             this.Controls.Add(audioPanel);
         }
@@ -243,19 +254,22 @@ namespace ChineseChess
             btnGiveUp.Location = new System.Drawing.Point(rightX, topOffset + 130);
             btnGiveUp.Width = rightW;
 
+            btnRules.Location = new System.Drawing.Point(rightX, topOffset + 180);
+            btnRules.Width = rightW;
+
             Label lblHistory = this.Controls.Cast<System.Windows.Forms.Control>()
                 .OfType<Label>()
                 .FirstOrDefault(l => l.Text == "移動歷史：");
             if (lblHistory != null)
-                lblHistory.Location = new System.Drawing.Point(rightX, topOffset + 185);
+                lblHistory.Location = new System.Drawing.Point(rightX, topOffset + 235);
 
-            lbMoveHistory.Location = new System.Drawing.Point(rightX, topOffset + 210);
+            lbMoveHistory.Location = new System.Drawing.Point(rightX, topOffset + 260);
             lbMoveHistory.Size = new System.Drawing.Size(rightW,
-                this.ClientSize.Height - (topOffset + 210) - 100 - margin);
+                this.ClientSize.Height - (topOffset + 260) - 150 - margin);
 
             audioPanel.Location = new System.Drawing.Point(rightX,
-                this.ClientSize.Height - 100 - margin);
-            audioPanel.Size = new System.Drawing.Size(rightW, 95);
+                this.ClientSize.Height - 150 - margin);
+            audioPanel.Size = new System.Drawing.Size(rightW, 145);
         }
 
         private void UpdateStatus()
@@ -471,20 +485,26 @@ namespace ChineseChess
             {
                 if (dlg.ShowDialog(this) == DialogResult.OK && dlg.SelectedPiece != null)
                 {
+                    logic.SaveBoardSnapshot();
                     bool ok = cardEffectProcessor.ProcessRevive(dlg.SelectedPiece);
                     if (ok)
-                        MessageBox.Show($"已復活 {dlg.SelectedPiece}！", "Q 牌 - 復活", MessageBoxButtons.OK);
+                        MessageBox.Show("已復活 " + dlg.SelectedPiece + "！", "Q 牌 - 復活", MessageBoxButtons.OK);
                 }
             }
         }
 
         private void NewGame()
         {
-            DialogResult result = MessageBox.Show("選擇遊戲模式\n\nYES: 雙人對戰\nNO: 玩家 vs AI", "新遊戲", MessageBoxButtons.YesNo);
-            if (result == DialogResult.Yes)
-                StartPvP();
-            else
-                StartPlayerVsAI();
+            using (GameModeDialog dlg = new GameModeDialog())
+            {
+                if (dlg.ShowDialog(this) == DialogResult.OK)
+                {
+                    if (dlg.Choice == GameModeDialog.ModeChoice.PvP)
+                        StartPvP();
+                    else if (dlg.Choice == GameModeDialog.ModeChoice.AI)
+                        StartPlayerVsAI();
+                }
+            }
         }
 
         private void StartPvP()
@@ -666,6 +686,17 @@ namespace ChineseChess
                 UpdateStatus();
                 boardPanel.Invalidate();
             }
+        }
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            if (MessageBox.Show("確定要退出遊戲嗎？", "退出確認",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.No)
+            {
+                e.Cancel = true;
+                return;
+            }
+            base.OnFormClosing(e);
         }
 
         protected override void OnFormClosed(FormClosedEventArgs e)

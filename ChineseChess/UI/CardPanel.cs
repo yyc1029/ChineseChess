@@ -96,14 +96,20 @@ namespace ChineseChess.UI
                 int x = startX + i * (cardW + 8);
                 int y = hoveredCardIndex == i ? cardY - 6 : cardY;
 
-                Image img = GetCardImage(card);
+                bool showFace = (card.Effect != CardEffect.Duel);
+                Image img = showFace ? GetCardImage(card) : GetBackImage();
                 if (img != null)
                 {
                     g.DrawImage(img, x, y, cardW, cardH);
                 }
-                else
+                else if (showFace)
                 {
                     DrawFallbackCard(g, card, x, y, cardW, cardH);
+                }
+                else
+                {
+                    g.FillRectangle(Brushes.DarkBlue, x, y, cardW, cardH);
+                    g.DrawRectangle(Pens.White, x, y, cardW, cardH);
                 }
 
                 // Hover highlight
