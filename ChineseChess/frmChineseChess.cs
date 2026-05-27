@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using System.Windows.Forms;
 using ChineseChess.UI;
 using ChineseChess.Game;
@@ -21,6 +22,10 @@ namespace ChineseChess
         public frmChineseChess()
         {
             InitializeComponent();
+            this.AutoScaleMode = AutoScaleMode.Font;
+            this.ClientSize = new System.Drawing.Size(900, 600);
+            this.MinimumSize = new System.Drawing.Size(800, 500);
+            this.Resize += (s, e) => UpdateLayout();
             aiPlayer = new AIPlayer();
             InitializeUI();
             SetupGame();
@@ -122,6 +127,47 @@ namespace ChineseChess
         private void SetupGame()
         {
             UpdateStatus();
+        }
+
+        private void UpdateLayout()
+        {
+            if (boardPanel == null) return;
+
+            int margin = 10;
+            int boardSize = Math.Min(this.ClientSize.Height - menuStrip.Height - 50, this.ClientSize.Width - 200);
+            boardSize = Math.Max(boardSize, 300);
+
+            // 棋盤位置
+            boardPanel.Location = new System.Drawing.Point(margin, 60);
+            boardPanel.Size = new System.Drawing.Size(boardSize, boardSize);
+
+            // 右側面板控件
+            int rightX = boardPanel.Right + margin;
+            int rightWidth = this.ClientSize.Width - rightX - margin;
+            if (rightWidth < 100) rightWidth = 100;
+
+            lblStatus.Location = new System.Drawing.Point(rightX, 60);
+
+            btnNewGame.Location = new System.Drawing.Point(rightX, 90);
+            btnNewGame.Width = rightWidth - margin;
+
+            btnUndo.Location = new System.Drawing.Point(rightX, 140);
+            btnUndo.Width = rightWidth - margin;
+
+            btnGiveUp.Location = new System.Drawing.Point(rightX, 190);
+            btnGiveUp.Width = rightWidth - margin;
+
+            Label lblHistory = this.Controls.Cast<Control>()
+                .OfType<Label>()
+                .FirstOrDefault(l => l.Text == "移動歷史：");
+            if (lblHistory != null)
+            {
+                lblHistory.Location = new System.Drawing.Point(rightX, 240);
+            }
+
+            lbMoveHistory.Location = new System.Drawing.Point(rightX, 265);
+            lbMoveHistory.Size = new System.Drawing.Size(rightWidth - margin,
+                this.ClientSize.Height - 265 - margin);
         }
 
         private void UpdateStatus()

@@ -10,9 +10,11 @@ namespace ChineseChess.UI
     public class BoardPanel : Control
     {
         private GameLogic gameLogic;
-        private int cellSize = 50;
+        private int cellSize = 40;
         private List<Position> possibleMoves = new List<Position>();
         private SoundManager soundManager;
+        private const int BOARD_COLS = 9;
+        private const int BOARD_ROWS = 10;
 
         public event Action<Position> OnPieceSelected;
         public event Action<Position, Position> OnMoveMade;
@@ -34,6 +36,9 @@ namespace ChineseChess.UI
         {
             Graphics g = e.Graphics;
             g.Clear(BackColor);
+
+            // 自動計算棋格大小以適應控件大小
+            cellSize = Math.Min(Width / BOARD_COLS, Height / BOARD_ROWS);
 
             DrawBoard(g);
             DrawRiver(g);
@@ -77,23 +82,32 @@ namespace ChineseChess.UI
         private void DrawPieces(Graphics g)
         {
             Brush redBrush = new SolidBrush(Color.Red);
-            Brush blackBrush = new SolidBrush(Color.Black);
-            Font font = new Font("Arial", 12, FontStyle.Bold);
+            Brush blackBrush = new SolidBrush(Color.FromArgb(50, 50, 50));
+            int fontSize = Math.Max(8, cellSize / 3);
+            Font font = new Font("Arial", fontSize, FontStyle.Bold);
             StringFormat format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
 
             foreach (Piece piece in gameLogic.Board.GetAllPieces())
             {
                 float x = piece.Position.X * cellSize + cellSize / 2;
                 float y = piece.Position.Y * cellSize + cellSize / 2;
+                float pieceRadius = cellSize / 2.5f;
+
                 Brush brush = piece.Color == PlayerColor.Red ? redBrush : blackBrush;
+                Pen borderPen = piece.Color == PlayerColor.Red
+                    ? new Pen(Color.DarkRed, 2)
+                    : new Pen(Color.White, 2);
 
                 // 繪製棋子圓形
-                RectangleF circle = new RectangleF(x - 20, y - 20, 40, 40);
+                RectangleF circle = new RectangleF(x - pieceRadius, y - pieceRadius, pieceRadius * 2, pieceRadius * 2);
                 g.FillEllipse(brush, circle);
-                g.DrawEllipse(new Pen(Color.Black, 1), circle);
+                g.DrawEllipse(borderPen, circle);
 
-                // 繪製棋子文字
-                g.DrawString(piece.GetCharCode().ToString(), font, new SolidBrush(Color.White), x, y, format);
+                // 繪製棋子文字（黑棋用白色，紅棋用黃色）
+                Brush textBrush = piece.Color == PlayerColor.Red
+                    ? new SolidBrush(Color.Yellow)
+                    : new SolidBrush(Color.White);
+                g.DrawString(piece.GetCharCode().ToString(), font, textBrush, x, y, format);
             }
         }
 
